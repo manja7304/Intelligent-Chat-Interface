@@ -1,0 +1,223 @@
+{
+  "form_type": "sample_hr_form",
+  "title": "Candidate Information Form",
+  "description": "Comprehensive candidate assessment form for HR professionals",
+  "sections": {
+    "personal_information": {
+      "full_name": {
+        "label": "Full Name",
+        "type": "text",
+        "required": true,
+        "description": "Candidate's full legal name"
+      },
+      "email": {
+        "label": "Email Address",
+        "type": "email",
+        "required": true,
+        "description": "Primary email address for communication"
+      },
+      "phone": {
+        "label": "Phone Number",
+        "type": "tel",
+        "required": true,
+        "description": "Primary contact number"
+      },
+      "location": {
+        "label": "Location",
+        "type": "text",
+        "required": false,
+        "description": "Current city, state, or country"
+      },
+      "linkedin_url": {
+        "label": "LinkedIn Profile",
+        "type": "url",
+        "required": false,
+        "description": "LinkedIn profile URL"
+      },
+      "github_url": {
+        "label": "GitHub Profile",
+        "type": "url",
+        "required": false,
+        "description": "GitHub profile URL (for technical roles)"
+      }
+    },
+    "professional_summary": {
+      "summary": {
+        "label": "Professional Summary",
+        "type": "textarea",
+        "required": true,
+        "description": "Brief overview of candidate's professional background"
+      },
+      "current_position": {
+        "label": "Current Position",
+        "type": "text",
+        "required": true,
+        "description": "Current job title or role"
+      },
+      "current_company": {
+        "label": "Current Company",
+        "type": "text",
+        "required": true,
+        "description": "Current employer"
+      },
+      "experience_years": {
+        "label": "Years of Experience",
+        "type": "number",
+        "required": true,
+        "description": "Total years of professional experience"
+      },
+      "industry": {
+        "label": "Industry",
+        "type": "text",
+        "required": false,
+        "description": "Primary industry or sector"
+      }
+    },
+    "skills_assessment": {
+      "technical_skills": {
+        "label": "Technical Skills",
+        "type": "textarea",
+        "required": true,
+        "description": "Programming languages, frameworks, tools, and technologies"
+      },
+      "soft_skills": {
+        "label": "Soft Skills",
+        "type": "textarea",
+        "required": false,
+        "description": "Communication, leadership, teamwork, etc."
+      },
+      "certifications": {
+        "label": "Certifications",
+        "type": "textarea",
+        "required": false,
+        "description": "Professional certifications and licenses"
+      },
+      "languages": {
+        "label": "Languages",
+        "type": "text",
+        "required": false,
+        "description": "Spoken languages and proficiency levels"
+      }
+    },
+    "experience_details": {
+      "work_experience": {
+        "label": "Work Experience",
+        "type": "textarea",
+        "required": true,
+        "description": "Detailed work history with key responsibilities"
+      },
+      "key_achievements": {
+        "label": "Key Achievements",
+        "type": "textarea",
+        "required": false,
+        "description": "Notable accomplishments and contributions"
+      },
+      "projects": {
+        "label": "Notable Projects",
+        "type": "textarea",
+        "required": false,
+        "description": "Significant projects and their outcomes"
+      },
+      "leadership_experience": {
+        "label": "Leadership Experience",
+        "type": "textarea",
+        "required": false,
+        "description": "Management or leadership roles and responsibilities"
+      }
+    },
+    "education_background": {
+      "education": {
+        "label": "Education",
+        "type": "textarea",
+        "required": true,
+        "description": "Educational background and qualifications"
+      },
+      "additional_training": {
+        "label": "Additional Training/Courses",
+        "type": "textarea",
+        "required": false,
+        "description": "Professional development courses and training"
+      },
+      "awards_honors": {
+        "label": "Awards and Honors",
+        "type": "textarea",
+        "required": false,
+        "description": "Academic or professional recognition"
+      }
+    },
+    "hr_assessment": {
+      "availability": {
+        "label": "Availability",
+        "type": "text",
+        "required": false,
+        "description": "When the candidate can start"
+      },
+      "salary_expectations": {
+        "label": "Salary Expectations",
+        "type": "text",
+        "required": false,
+        "description": "Expected salary range or requirements"
+      },
+      "notice_period": {
+        "label": "Notice Period",
+        "type": "text",
+        "required": false,
+        "description": "Current notice period with existing employer"
+      },
+      "work_authorization": {
+        "label": "Work Authorization",
+        "type": "select",
+        "options": ["Citizen", "Permanent Resident", "Work Visa", "Other"],
+        "required": false,
+        "description": "Work authorization status"
+      },
+      "remote_preference": {
+        "label": "Remote Work Preference",
+        "type": "select",
+        "options": ["Remote Only", "Hybrid", "On-site Only", "Flexible"],
+        "required": false,
+        "description": "Preferred work arrangement"
+      },
+      "additional_notes": {
+        "label": "Additional Notes",
+        "type": "textarea",
+        "required": false,
+        "description": "Any additional information or special considerations"
+      }
+    },
+    "interview_notes": {
+      "interviewer_name": {
+        "label": "Interviewer Name",
+        "type": "text",
+        "required": false,
+        "description": "Name of the person conducting the interview"
+      },
+      "interview_date": {
+        "label": "Interview Date",
+        "type": "date",
+        "required": false,
+        "description": "Date of the interview"
+      },
+      "interview_notes": {
+        "label": "Interview Notes",
+        "type": "textarea",
+        "required": false,
+        "description": "Notes from the interview process"
+      },
+      "overall_rating": {
+        "label": "Overall Rating",
+        "type": "select",
+        "options": ["Excellent", "Good", "Average", "Below Average", "Poor"],
+        "required": false,
+        "description": "Overall assessment of the candidate"
+      },
+      "recommendation": {
+        "label": "Recommendation",
+        "type": "select",
+        "options": ["Strong Hire", "Hire", "No Hire", "Strong No Hire"],
+        "required": false,
+        "description": "Final hiring recommendation"
+      }
+    }
+  }
+}

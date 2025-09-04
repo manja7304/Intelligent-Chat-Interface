@@ -1,0 +1,67 @@
+JOHN SMITH
+Software Engineer
+john.smith@email.com | (555) 123-4567 | San Francisco, CA
+LinkedIn: linkedin.com/in/johnsmith | GitHub: github.com/johnsmith
+
+PROFESSIONAL SUMMARY
+Experienced software engineer with 5+ years of experience in full-stack development. 
+Specialized in Python, JavaScript, and cloud technologies. Passionate about building 
+scalable applications and leading technical teams.
+
+TECHNICAL SKILLS
+Programming Languages: Python, JavaScript, Java, C++, SQL
+Frameworks: React, Node.js, Django, Flask, Spring Boot
+Cloud Platforms: AWS, Azure, Google Cloud Platform
+Databases: PostgreSQL, MongoDB, Redis, MySQL
+Tools & Technologies: Docker, Kubernetes, Git, Jenkins, CI/CD
+Other: Machine Learning, Data Science, REST APIs, Microservices
+
+PROFESSIONAL EXPERIENCE
+
+Senior Software Engineer | TechCorp Inc. | 2020 - Present
+• Led development of microservices architecture serving 1M+ users
+• Implemented CI/CD pipelines reducing deployment time by 60%
+• Mentored junior developers and conducted code reviews
+• Technologies: Python, React, AWS, Docker, Kubernetes
+
+Software Engineer | StartupXYZ | 2018 - 2020
+• Developed full-stack web applications using Python and JavaScript
+• Built REST APIs and integrated third-party services
+• Collaborated with product team to define technical requirements
+• Technologies: Django, React, PostgreSQL, Redis
+
+Junior Developer | WebSolutions Ltd. | 2017 - 2018
+• Created responsive web interfaces using HTML, CSS, and JavaScript
+• Maintained and debugged existing codebase
+• Participated in agile development process
+• Technologies: JavaScript, jQuery, PHP, MySQL
+
+EDUCATION
+Bachelor of Science in Computer Science
+University of California, Berkeley | 2013 - 2017
+GPA: 3.8/4.0
+
+CERTIFICATIONS
+• AWS Certified Solutions Architect (2021)
+• Google Cloud Professional Developer (2020)
+• Certified Scrum Master (2019)
+
+PROJECTS
+E-commerce Platform: Built a scalable e-commerce platform using Django and React
+• Implemented payment processing with Stripe API
+• Achieved 99.9% uptime with load balancing
+• Technologies: Python, Django, React, PostgreSQL, AWS
+
+Machine Learning Model: Developed a recommendation system for e-commerce
+• Trained models using TensorFlow and scikit-learn
+• Improved conversion rates by 25%
+• Technologies: Python, TensorFlow, Pandas, NumPy
+
+ACHIEVEMENTS
+• Led team of 5 developers in successful product launch
+• Reduced system response time by 40% through optimization
+• Contributed to open-source projects with 500+ GitHub stars
+• Speaker at 3 tech conferences on microservices architecture
+
+LANGUAGES
+English (Native), Spanish (Conversational), French (Basic)

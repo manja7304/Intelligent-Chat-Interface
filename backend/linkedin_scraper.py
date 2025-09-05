@@ -61,7 +61,13 @@ class LinkedInScraper:
         """
         try:
             if self.serpapi_key:
-                return self._get_profile_with_serpapi(profile_url)
+                data = self._get_profile_with_serpapi(profile_url)
+                if data:
+                    return data
+                # Try SerpAPI Google engine as a secondary real-data path
+                data = self._get_profile_via_serpapi_google(profile_url)
+                if data:
+                    return data
             else:
                 return self._get_profile_with_web_scraping(profile_url)
         except Exception as e:
@@ -85,7 +91,16 @@ class LinkedInScraper:
             }
 
             response = requests.get("https://serpapi.com/search", params=params)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as http_err:
+                # Graceful fallback on 4xx (e.g., 400 from LinkedIn engine)
+                if response.status_code in (400, 401, 403, 429):
+                    logger.error(
+                        f"SerpAPI search returned {response.status_code}, falling back to mock search"
+                    )
+                    return self._search_with_web_scraping(name, company)
+                raise
 
             data = response.json()
             profiles = []
@@ -108,7 +123,8 @@ class LinkedInScraper:
 
         except Exception as e:
             logger.error(f"SerpAPI search failed: {e}")
-            return []
+            # Final fallback
+            return self._search_with_web_scraping(name, company)
 
     def _search_with_web_scraping(
         self, name: str, company: str = None
@@ -151,7 +167,16 @@ class LinkedInScraper:
             }
 
             response = requests.get("https://serpapi.com/search", params=params)
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as http_err:
+                # On LinkedIn engine 4xx, return empty to allow Google-engine fallback first
+                if response.status_code in (400, 401, 403, 429):
+                    logger.error(
+                        f"SerpAPI profile extraction returned {response.status_code}, attempting Google-engine fallback"
+                    )
+                    return {}
+                raise
 
             data = response.json()
 
@@ -173,6 +198,55 @@ class LinkedInScraper:
 
         except Exception as e:
             logger.error(f"SerpAPI profile extraction failed: {e}")
+            # Final fallback
+            return self._get_profile_with_web_scraping(profile_url)
+
+    def _get_profile_via_serpapi_google(self, profile_url: str) -> Dict[str, Any]:
+        """Attempt minimal real data using SerpAPI Google results for the given profile URL.
+
+        This does not bypass LinkedIn protections; it only uses the public Google result snippet.
+        """
+        try:
+            params = {
+                "api_key": self.serpapi_key,
+                "engine": "google",
+                "q": profile_url,
+                "num": 1,
+                "hl": "en",
+            }
+            resp = requests.get("https://serpapi.com/search", params=params, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
+
+            organic = data.get("organic_results", [])
+            if not organic:
+                return {}
+
+            top = organic[0]
+            link = top.get("link", "")
+            if profile_url.rstrip("/") not in link.rstrip("/"):
+                # Not the same profile, avoid mismatches
+                return {}
+
+            title = top.get("title", "")
+            snippet = top.get("snippet", "")
+
+            profile_data = {
+                "name": title.split(" - ")[0].strip() if title else "",
+                "title": "",
+                "company": "",
+                "location": "",
+                "summary": snippet,
+                "experience": [],
+                "education": [],
+                "skills": self._extract_skills_from_text(snippet),
+                "connections": "",
+                "image_url": "",
+                "profile_url": profile_url,
+            }
+            return profile_data
+        except Exception as e:
+            logger.error(f"SerpAPI Google fallback failed: {e}")
             return {}
 
     def _get_profile_with_web_scraping(self, profile_url: str) -> Dict[str, Any]:

@@ -42,91 +42,64 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Theme and CSS (supports light/dark modes)
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
-
-
-def inject_theme_css():
-    bg = "#0e1117" if st.session_state.dark_mode else "#ffffff"
-    text = "#e0e0e0" if st.session_state.dark_mode else "#111111"
-    card_bg = "#161a23" if st.session_state.dark_mode else "#fafafa"
-    border = "#2a2f3a" if st.session_state.dark_mode else "#dddddd"
-    primary = "#7aa2f7" if st.session_state.dark_mode else "#1f77b4"
-    user_bg = "#1f3a5a" if st.session_state.dark_mode else "#e3f2fd"
-    assistant_bg = "#1a1e27" if st.session_state.dark_mode else "#f5f5f5"
-
-    st.markdown(
-        f"""
+# Custom CSS for modern UI
+st.markdown(
+    """
 <style>
-    :root {{
-        --bg: {bg};
-        --text: {text};
-        --card: {card_bg};
-        --border: {border};
-        --primary: {primary};
-        --user-bg: {user_bg};
-        --assistant-bg: {assistant_bg};
-    }}
-    .main-header {{
+    .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: var(--primary);
+        color: #1f77b4;
         text-align: center;
         margin-bottom: 2rem;
-    }}
-    .stApp {{ background-color: var(--bg); color: var(--text); }}
-    .chat-message {{
+    }
+    .chat-message {
         padding: 1rem;
         border-radius: 10px;
         margin: 0.5rem 0;
         max-width: 80%;
-        color: var(--text);
-    }}
-    .user-message {{
-        background-color: var(--user-bg);
+    }
+    .user-message {
+        background-color: #e3f2fd;
         margin-left: auto;
         text-align: right;
-    }}
-    .assistant-message {{
-        background-color: var(--assistant-bg);
+    }
+    .assistant-message {
+        background-color: #f5f5f5;
         margin-right: auto;
-    }}
-    .success-message {{
-        background-color: #1b3c26;
+    }
+    .success-message {
+        background-color: #e8f5e8;
         border-left: 4px solid #4caf50;
         padding: 1rem;
         margin: 1rem 0;
-    }}
-    .error-message {{
-        background-color: #3a1e20;
+    }
+    .error-message {
+        background-color: #ffebee;
         border-left: 4px solid #f44336;
         padding: 1rem;
         margin: 1rem 0;
-    }}
-    .candidate-card {{
-        border: 1px solid var(--border);
-        border-radius: 10px;
+    }
+    .candidate-card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem 0;
-        background-color: var(--card);
-    }}
-    .skill-tag {{
-        background-color: var(--primary);
+        background-color: #fafafa;
+    }
+    .skill-tag {
+        background-color: #1f77b4;
         color: white;
         padding: 0.2rem 0.5rem;
         border-radius: 15px;
         font-size: 0.8rem;
         margin: 0.2rem;
         display: inline-block;
-    }}
+    }
 </style>
 """,
-        unsafe_allow_html=True,
-    )
-
-
-inject_theme_css()
+    unsafe_allow_html=True,
+)
 
 
 def process_user_input(
@@ -277,20 +250,10 @@ with st.sidebar:
 
     # API Key configuration
     st.subheader("Configuration")
-    dark_mode = st.toggle("Dark mode", value=st.session_state.dark_mode)
-    if dark_mode != st.session_state.dark_mode:
-        st.session_state.dark_mode = dark_mode
-        inject_theme_css()
-    openai_key = st.text_input(
-        "OpenAI API Key",
-        value=config.OPENAI_API_KEY,
-        type="password",
-        help="Enter your OpenAI API key to enable AI features",
-    )
-
-    if openai_key != config.OPENAI_API_KEY:
-        config.OPENAI_API_KEY = openai_key
-        st.success("API key updated!")
+    if config.OPENAI_API_KEY:
+        st.caption("OpenAI API key loaded from environment.")
+    else:
+        st.warning("OpenAI API key not found. Set OPENAI_API_KEY in your .env file.")
 
     st.markdown("---")
 
@@ -313,254 +276,326 @@ if db_manager is None:
     st.error("Failed to initialize application. Please check your configuration.")
     st.stop()
 
-# Tabs: Chat, Upload, Candidates
-chat_tab, upload_tab, candidates_tab = st.tabs(
-    ["💬 Chat", "📁 Upload", "👥 Candidates"]
-)
+# Main chat interface
+st.header("💬 Chat Interface")
 
-with chat_tab:
-    st.header("Chat Interface")
+# Display chat messages
+if hasattr(st.session_state, "messages"):
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-    # Display chat messages with avatars
-    if hasattr(st.session_state, "messages"):
-        for message in st.session_state.messages:
-            avatar = "🧑" if message["role"] == "user" else "🤖"
-            with st.chat_message(message["role"], avatar=avatar):
-                st.markdown(message["content"])
+# Chat input
+if prompt := st.chat_input(
+    "Ask me about candidates, upload a resume, or search LinkedIn..."
+):
+    # Add user message to chat history
+    if not hasattr(st.session_state, "messages"):
+        st.session_state.messages = []
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # Chat input
-    if prompt := st.chat_input(
-        "Ask me about candidates, upload a resume, or search LinkedIn..."
-    ):
-        if not hasattr(st.session_state, "messages"):
-            st.session_state.messages = []
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-        with st.chat_message("user", avatar="🧑"):
-            st.markdown(prompt)
+    # Process the user input
+    with st.chat_message("assistant"):
+        response = process_user_input(
+            prompt, db_manager, resume_parser, linkedin_scraper, ai_form_filler
+        )
+        st.markdown(response)
 
-        with st.chat_message("assistant", avatar="🤖"):
-            response = process_user_input(
-                prompt, db_manager, resume_parser, linkedin_scraper, ai_form_filler
-            )
-            st.markdown(response)
+# File upload section
+st.markdown("---")
+st.header("📁 File Upload")
 
-    # Current Candidate + Forms inside Chat tab for quick actions
-    if (
-        hasattr(st.session_state, "current_candidate")
-        and st.session_state.current_candidate
-    ):
-        st.markdown("---")
-        st.subheader("👤 Current Candidate")
+col1, col2 = st.columns(2)
 
-        candidate = st.session_state.current_candidate
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write(f"**Name:** {candidate.get('name', 'N/A')}")
-            st.write(f"**Email:** {candidate.get('email', 'N/A')}")
-            st.write(f"**Phone:** {candidate.get('phone', 'N/A')}")
-            st.write(f"**Location:** {candidate.get('location', 'N/A')}")
-        with col2:
-            st.write(
-                f"**Current Position:** {candidate.get('current_position', 'N/A')}"
-            )
-            st.write(f"**Current Company:** {candidate.get('current_company', 'N/A')}")
-            st.write(f"**Experience:** {candidate.get('experience_years', 0)} years")
-            st.write(f"**LinkedIn:** {candidate.get('linkedin_url', 'N/A')}")
-        with col3:
-            skills = candidate.get("skills", [])
-            if skills:
-                for skill in skills[:10]:
-                    st.markdown(
-                        f'<span class="skill-tag">{skill}</span>',
-                        unsafe_allow_html=True,
+with col1:
+    uploaded_file = st.file_uploader(
+        "Upload Resume (PDF)",
+        type=["pdf"],
+        help="Upload a candidate's resume in PDF format",
+    )
+
+    if uploaded_file is not None:
+        if st.button("🔍 Parse Resume"):
+            with st.spinner("Parsing resume..."):
+                try:
+                    # Save uploaded file
+                    file_path = f"data/{uploaded_file.name}"
+                    os.makedirs("data", exist_ok=True)
+
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+
+                    # Parse resume
+                    candidate_data = resume_parser.parse_resume(file_path)
+
+                    # Add to database
+                    candidate_id = db_manager.add_candidate(candidate_data)
+                    candidate_data["id"] = candidate_id
+
+                    st.session_state.current_candidate = candidate_data
+                    if not hasattr(st.session_state, "messages"):
+                        st.session_state.messages = []
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": f"✅ Successfully parsed resume for **{candidate_data['name']}**!\n\n**Extracted Information:**\n- Email: {candidate_data.get('email', 'N/A')}\n- Phone: {candidate_data.get('phone', 'N/A')}\n- Skills: {', '.join(candidate_data.get('skills', [])[:5])}\n- Experience: {candidate_data.get('experience_years', 0)} years",
+                        }
                     )
+
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Error parsing resume: {e}")
+
+with col2:
+    linkedin_url = st.text_input(
+        "LinkedIn Profile URL",
+        placeholder="https://linkedin.com/in/username",
+        help="Enter a LinkedIn profile URL to extract candidate information",
+    )
+
+    if st.button("🔗 Extract LinkedIn Data"):
+        if linkedin_url:
+            with st.spinner("Extracting LinkedIn data..."):
+                try:
+                    linkedin_data = linkedin_scraper.get_profile_data(linkedin_url)
+
+                    if linkedin_data:
+                        # Add to database
+                        candidate_id = db_manager.add_candidate(linkedin_data)
+                        linkedin_data["id"] = candidate_id
+
+                        st.session_state.current_candidate = linkedin_data
+                        if not hasattr(st.session_state, "messages"):
+                            st.session_state.messages = []
+                        st.session_state.messages.append(
+                            {
+                                "role": "assistant",
+                                "content": f"✅ Successfully extracted LinkedIn data for **{linkedin_data['name']}**!\n\n**Profile Information:**\n- Title: {linkedin_data.get('title', 'N/A')}\n- Company: {linkedin_data.get('company', 'N/A')}\n- Location: {linkedin_data.get('location', 'N/A')}\n- Skills: {', '.join(linkedin_data.get('skills', [])[:5])}",
+                            }
+                        )
+
+                        st.rerun()
+                    else:
+                        st.error("Could not extract data from LinkedIn profile")
+
+                except Exception as e:
+                    st.error(f"Error extracting LinkedIn data: {e}")
+        else:
+            st.warning("Please enter a LinkedIn profile URL")
+
+# Candidate management section
+if (
+    hasattr(st.session_state, "current_candidate")
+    and st.session_state.current_candidate
+):
+    st.markdown("---")
+    st.header("👤 Current Candidate")
+
+    candidate = st.session_state.current_candidate
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.subheader("Personal Information")
+        st.write(f"**Name:** {candidate.get('name', 'N/A')}")
+        st.write(f"**Email:** {candidate.get('email', 'N/A')}")
+        st.write(f"**Phone:** {candidate.get('phone', 'N/A')}")
+        st.write(f"**Location:** {candidate.get('location', 'N/A')}")
+
+    with col2:
+        st.subheader("Professional Information")
+        st.write(f"**Current Position:** {candidate.get('current_position', 'N/A')}")
+        st.write(f"**Current Company:** {candidate.get('current_company', 'N/A')}")
+        st.write(f"**Experience:** {candidate.get('experience_years', 0)} years")
+        st.write(f"**LinkedIn:** {candidate.get('linkedin_url', 'N/A')}")
+
+        # Delete current candidate button
+        if st.button("🗑️ Delete This Candidate", type="secondary"):
+            try:
+                ok = db_manager.delete_candidate(candidate.get("id"))
+                if ok:
+                    st.success("Candidate deleted")
+                    st.session_state.current_candidate = None
+                    st.rerun()
+                else:
+                    st.error("Failed to delete candidate")
+            except Exception as e:
+                st.error(f"Error deleting candidate: {e}")
+
+    with col3:
+        st.subheader("Skills")
+        skills = candidate.get("skills", [])
+        if skills:
+            for skill in skills[:10]:  # Show first 10 skills
+                st.markdown(
+                    f'<span class="skill-tag">{skill}</span>', unsafe_allow_html=True
+                )
+        else:
+            st.write("No skills extracted")
+
+    # Form generation
+    st.markdown("---")
+    st.header("📋 Generate HR Forms")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("📝 Generate Standard HR Form", use_container_width=True):
+            if ai_form_filler and config.OPENAI_API_KEY:
+                with st.spinner("Generating HR form..."):
+                    try:
+                        filled_form = ai_form_filler.generate_standard_hr_form(
+                            candidate
+                        )
+
+                        # Save to database
+                        form_id = db_manager.save_generated_form(
+                            candidate["id"], "standard_hr_form", filled_form
+                        )
+
+                        st.session_state.generated_form = filled_form
+                        st.success("✅ Standard HR form generated successfully!")
+
+                    except Exception as e:
+                        st.error(f"Error generating form: {e}")
             else:
-                st.write("No skills extracted")
+                st.error("OpenAI API key required for form generation")
 
+    with col2:
+        if st.button("🎯 Generate Interview Form", use_container_width=True):
+            if ai_form_filler and config.OPENAI_API_KEY:
+                with st.spinner("Generating interview form..."):
+                    try:
+                        filled_form = ai_form_filler.generate_interview_form(candidate)
+
+                        # Save to database
+                        form_id = db_manager.save_generated_form(
+                            candidate["id"], "interview_assessment", filled_form
+                        )
+
+                        st.session_state.generated_form = filled_form
+                        st.success("✅ Interview form generated successfully!")
+
+                    except Exception as e:
+                        st.error(f"Error generating form: {e}")
+            else:
+                st.error("OpenAI API key required for form generation")
+
+    # Display generated form
+    if hasattr(st.session_state, "generated_form") and st.session_state.generated_form:
         st.markdown("---")
-        st.subheader("📋 Generate HR Forms")
-        g1, g2 = st.columns(2)
-        with g1:
-            if st.button("📝 Standard HR Form", use_container_width=True):
-                if ai_form_filler and config.OPENAI_API_KEY:
-                    with st.spinner("Generating HR form..."):
-                        try:
-                            filled_form = ai_form_filler.generate_standard_hr_form(
-                                candidate
-                            )
-                            form_id = db_manager.save_generated_form(
-                                candidate["id"], "standard_hr_form", filled_form
-                            )
-                            st.session_state.generated_form = filled_form
-                            st.success("Generated standard HR form ✅")
-                        except Exception as e:
-                            st.error(f"Error generating form: {e}")
-                else:
-                    st.error("OpenAI API key required for form generation")
-        with g2:
-            if st.button("🎯 Interview Form", use_container_width=True):
-                if ai_form_filler and config.OPENAI_API_KEY:
-                    with st.spinner("Generating interview form..."):
-                        try:
-                            filled_form = ai_form_filler.generate_interview_form(
-                                candidate
-                            )
-                            form_id = db_manager.save_generated_form(
-                                candidate["id"], "interview_assessment", filled_form
-                            )
-                            st.session_state.generated_form = filled_form
-                            st.success("Generated interview form ✅")
-                        except Exception as e:
-                            st.error(f"Error generating form: {e}")
-                else:
-                    st.error("OpenAI API key required for form generation")
+        st.header("📄 Generated Form")
 
-        if (
-            hasattr(st.session_state, "generated_form")
-            and st.session_state.generated_form
-        ):
-            st.markdown("---")
-            st.subheader("📄 Generated Form")
-            form = st.session_state.generated_form
-            e1, e2, e3 = st.columns(3)
-            with e1:
-                if st.button("📄 Export to PDF"):
-                    try:
-                        os.makedirs("exports", exist_ok=True)
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"exports/hr_form_{candidate['name'].replace(' ', '_')}_{timestamp}.pdf"
-                        ai_form_filler.export_form_to_pdf(form, filename)
-                        st.success(f"Exported to PDF: {filename}")
-                    except Exception as e:
-                        st.error(f"Error exporting to PDF: {e}")
-            with e2:
-                if st.button("📊 Export to Excel"):
-                    try:
-                        os.makedirs("exports", exist_ok=True)
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"exports/hr_form_{candidate['name'].replace(' ', '_')}_{timestamp}.xlsx"
-                        ai_form_filler.export_form_to_excel(form, filename)
-                        st.success(f"Exported to Excel: {filename}")
-                    except Exception as e:
-                        st.error(f"Error exporting to Excel: {e}")
-            with e3:
-                if st.button("📋 Copy as JSON"):
-                    st.code(json.dumps(form, indent=2))
-            for section_name, section_data in form.items():
-                if section_name.startswith("_"):
-                    continue
-                with st.expander(f"📋 {section_name.replace('_', ' ').title()}"):
+        form = st.session_state.generated_form
+
+        # Export options
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("📄 Export to PDF"):
+                try:
+                    os.makedirs("exports", exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"exports/hr_form_{candidate['name'].replace(' ', '_')}_{timestamp}.pdf"
+
+                    ai_form_filler.export_form_to_pdf(form, filename)
+                    st.success(f"✅ Form exported to PDF: {filename}")
+
+                except Exception as e:
+                    st.error(f"Error exporting to PDF: {e}")
+
+        with col2:
+            if st.button("📊 Export to Excel"):
+                try:
+                    os.makedirs("exports", exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"exports/hr_form_{candidate['name'].replace(' ', '_')}_{timestamp}.xlsx"
+
+                    ai_form_filler.export_form_to_excel(form, filename)
+                    st.success(f"✅ Form exported to Excel: {filename}")
+
+                except Exception as e:
+                    st.error(f"Error exporting to Excel: {e}")
+
+        with col3:
+            if st.button("📋 Copy as JSON"):
+                st.code(json.dumps(form, indent=2))
+
+        # Display form content
+        for section_name, section_data in form.items():
+            if section_name.startswith("_"):
+                continue
+
+            with st.expander(f"📋 {section_name.replace('_', ' ').title()}"):
+                # Some AI responses may return strings for sections; handle gracefully
+                if not isinstance(section_data, dict):
+                    st.write(section_data)
+                else:
                     for field_name, field_value in section_data.items():
                         if field_value:
                             st.write(
                                 f"**{field_name.replace('_', ' ').title()}:** {field_value}"
                             )
 
-with upload_tab:
-    st.header("Upload & Import")
-    col1, col2 = st.columns(2)
-    with col1:
-        uploaded_file = st.file_uploader(
-            "Upload Resume (PDF)",
-            type=["pdf"],
-            help="Upload a candidate's resume in PDF format",
-        )
-        if uploaded_file is not None:
-            if st.button("🔍 Parse Resume"):
-                with st.spinner("Parsing resume..."):
-                    try:
-                        file_path = f"data/{uploaded_file.name}"
-                        os.makedirs("data", exist_ok=True)
-                        with open(file_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
-                        candidate_data = resume_parser.parse_resume(file_path)
-                        candidate_id = db_manager.add_candidate(candidate_data)
-                        candidate_data["id"] = candidate_id
-                        st.session_state.current_candidate = candidate_data
-                        if not hasattr(st.session_state, "messages"):
-                            st.session_state.messages = []
-                        st.session_state.messages.append(
-                            {
-                                "role": "assistant",
-                                "content": f"✅ Parsed resume for **{candidate_data['name']}**!",
-                            }
-                        )
-                        st.success("Resume parsed and candidate saved ✅")
-                    except Exception as e:
-                        st.error(f"Error parsing resume: {e}")
-    with col2:
-        linkedin_url = st.text_input(
-            "LinkedIn Profile URL",
-            placeholder="https://linkedin.com/in/username",
-            help="Enter a LinkedIn profile URL to extract candidate information",
-        )
-        if st.button("🔗 Extract LinkedIn Data"):
-            if linkedin_url:
-                with st.spinner("Extracting LinkedIn data..."):
-                    try:
-                        linkedin_data = linkedin_scraper.get_profile_data(linkedin_url)
-                        if linkedin_data:
-                            candidate_id = db_manager.add_candidate(linkedin_data)
-                            linkedin_data["id"] = candidate_id
-                            st.session_state.current_candidate = linkedin_data
-                            if not hasattr(st.session_state, "messages"):
-                                st.session_state.messages = []
-                            st.session_state.messages.append(
-                                {
-                                    "role": "assistant",
-                                    "content": f"✅ Extracted LinkedIn data for **{linkedin_data['name']}**!",
-                                }
-                            )
-                            st.success("LinkedIn data imported ✅")
-                        else:
-                            st.error("Could not extract data from LinkedIn profile")
-                    except Exception as e:
-                        st.error(f"Error extracting LinkedIn data: {e}")
-            else:
-                st.warning("Please enter a LinkedIn profile URL")
+# Candidates overview
+if hasattr(st.session_state, "show_candidates") and getattr(
+    st.session_state, "show_candidates", False
+):
+    st.markdown("---")
+    st.header("👥 All Candidates")
 
-with candidates_tab:
-    st.header("All Candidates")
     try:
         candidates = db_manager.get_all_candidates()
+
         if candidates:
-            grid_cols = 3
-            rows = (len(candidates) + grid_cols - 1) // grid_cols
-            idx = 0
-            for r in range(rows):
-                cols = st.columns(grid_cols)
-                for c in range(grid_cols):
-                    if idx >= len(candidates):
-                        break
-                    cand = candidates[idx]
-                    with cols[c]:
-                        with st.container():
-                            st.markdown(
-                                '<div class="candidate-card">', unsafe_allow_html=True
-                            )
-                            st.write(f"**{cand['name']}**")
+            for candidate in candidates:
+                with st.container():
+                    col1, col2, col3 = st.columns([2, 1, 1])
+
+                    with col1:
+                        st.write(f"**{candidate['name']}**")
+                        st.write(
+                            f"*{candidate.get('current_position', 'N/A')} at {candidate.get('current_company', 'N/A')}*"
+                        )
+                        st.write(
+                            f"📧 {candidate.get('email', 'N/A')} | 📱 {candidate.get('phone', 'N/A')}"
+                        )
+
+                    with col2:
+                        skills = candidate.get("skills", [])
+                        if skills:
                             st.write(
-                                f"{cand.get('current_position', 'N/A')} at {cand.get('current_company', 'N/A')}"
+                                f"**Skills:** {', '.join(skills[:3])}{'...' if len(skills) > 3 else ''}"
                             )
-                            skills = cand.get("skills", [])
-                            if skills:
-                                st.write(
-                                    f"Skills: {', '.join(skills[:3])}{'...' if len(skills) > 3 else ''}"
-                                )
-                            if st.button("Select", key=f"select_{cand['id']}"):
-                                st.session_state.current_candidate = cand
-                                (
-                                    st.switch_page("app.py")
-                                    if hasattr(st, "switch_page")
-                                    else None
-                                )
-                            st.markdown("</div>", unsafe_allow_html=True)
-                    idx += 1
+
+                    with col3:
+                        if st.button(f"Select", key=f"select_{candidate['id']}"):
+                            st.session_state.current_candidate = candidate
+                            st.rerun()
+
+                        if st.button(
+                            f"Delete", key=f"delete_{candidate['id']}", type="secondary"
+                        ):
+                            try:
+                                ok = db_manager.delete_candidate(candidate["id"])
+                                if ok:
+                                    st.success("Deleted")
+                                    st.rerun()
+                                else:
+                                    st.error("Delete failed")
+                            except Exception as e:
+                                st.error(f"Error deleting candidate: {e}")
+
+                    st.markdown("---")
         else:
             st.info(
                 "No candidates found. Upload a resume or search LinkedIn to get started."
             )
+
     except Exception as e:
         st.error(f"Error loading candidates: {e}")
 

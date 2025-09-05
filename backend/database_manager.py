@@ -343,6 +343,37 @@ class DatabaseManager:
             logger.error(f"Error retrieving all candidates: {e}")
             raise
 
+    def delete_candidate(self, candidate_id: int) -> bool:
+        """Delete a candidate and related normalized rows."""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+
+                # Delete related generated forms
+                cursor.execute(
+                    "DELETE FROM generated_forms WHERE candidate_id = ?",
+                    (candidate_id,),
+                )
+
+                # Delete relations from candidate_skills
+                cursor.execute(
+                    "DELETE FROM candidate_skills WHERE candidate_id = ?",
+                    (candidate_id,),
+                )
+
+                # Delete candidate
+                cursor.execute(
+                    "DELETE FROM candidates WHERE id = ?",
+                    (candidate_id,),
+                )
+
+                conn.commit()
+                logger.info(f"Deleted candidate ID: {candidate_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error deleting candidate {candidate_id}: {e}")
+            return False
+
     def export_to_dataframe(self) -> pd.DataFrame:
         """Export all candidate data to pandas DataFrame"""
         try:

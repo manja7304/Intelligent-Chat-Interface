@@ -2,13 +2,13 @@
 AI-powered form filler for generating HR forms based on candidate data
 """
 
-import openai
 import json
 import logging
 from typing import Dict, List, Optional, Any
 import pandas as pd
 from datetime import datetime
 import os
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +18,9 @@ class AIFormFiller:
 
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.client = None
         self.model = "gpt-3.5-turbo"
         self.max_tokens = 2000
         self.temperature = 0.7
-
-        if api_key and api_key != "your_openai_api_key_here":
-            try:
-                self.client = openai.OpenAI(api_key=api_key)
-            except Exception as e:
-                # Fallback for older openai versions
-                openai.api_key = api_key
-                self.client = None
 
     def generate_hr_form(
         self, candidate_data: Dict[str, Any], form_template: Dict[str, Any]
@@ -53,40 +44,17 @@ class AIFormFiller:
             # Prepare the prompt for AI
             prompt = self._create_form_filling_prompt(candidate_data, form_template)
 
-            # Call OpenAI API
-            if self.client:
-                # New OpenAI client format
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert HR assistant that fills out forms based on candidate data. Be accurate and professional.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                )
-                ai_response = response.choices[0].message.content
-            else:
-                # Fallback for older openai versions
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert HR assistant that fills out forms based on candidate data. Be accurate and professional.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                )
-                ai_response = response.choices[0].message.content
+            # Call OpenAI API via REST to avoid SDK init issues
+            ai_response = self._call_openai_chat(prompt)
 
             # Parse the AI response
-            filled_form = self._parse_ai_response(ai_response, form_template)
+            filled_form = self._parse_ai_response(
+                ai_response, form_template, candidate_data
+            )
+            # Normalize to expected structure
+            filled_form = self._normalize_filled_form(
+                filled_form, form_template, candidate_data
+            )
 
             # Add metadata
             filled_form["_metadata"] = {
@@ -134,7 +102,10 @@ class AIFormFiller:
         return prompt
 
     def _parse_ai_response(
-        self, ai_response: str, form_template: Dict[str, Any]
+        self,
+        ai_response: str,
+        form_template: Dict[str, Any],
+        candidate_data: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Parse AI response and structure it according to the form template"""
         try:
@@ -177,6 +148,59 @@ class AIFormFiller:
                     filled_form[section][field] = config.get("default_value", "")
 
         return filled_form
+
+    def _normalize_filled_form(
+        self,
+        filled_form: Dict[str, Any],
+        form_template: Dict[str, Any],
+        candidate_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Ensure the returned form matches the template section/field structure."""
+        try:
+            template_sections = form_template.get("sections", {})
+
+            # If model returned {"sections": {...}}, unwrap it
+            if (
+                isinstance(filled_form, dict)
+                and "sections" in filled_form
+                and isinstance(filled_form["sections"], dict)
+            ):
+                filled_form = filled_form["sections"]
+
+            if not isinstance(filled_form, dict):
+                return self._create_fallback_form(form_template, candidate_data)
+
+            normalized: Dict[str, Any] = {}
+            for section_name, fields in template_sections.items():
+                raw_section = filled_form.get(section_name, {})
+                if not isinstance(raw_section, dict):
+                    raw_section = {"text": raw_section} if raw_section else {}
+
+                ensured_section: Dict[str, Any] = {}
+                for field_key, field_cfg in fields.items():
+                    val = raw_section.get(field_key)
+                    if isinstance(val, (str, int, float)) and val is not None:
+                        ensured_section[field_key] = val
+                    else:
+                        mapped = self._map_candidate_data_to_field(
+                            field_key, candidate_data
+                        )
+                        ensured_section[field_key] = mapped or field_cfg.get(
+                            "default_value", ""
+                        )
+
+                # Keep extra simple fields from AI, without overwriting expected ones
+                for extra_key, extra_val in raw_section.items():
+                    if extra_key not in ensured_section and isinstance(
+                        extra_val, (str, int, float)
+                    ):
+                        ensured_section[extra_key] = extra_val
+
+                normalized[section_name] = ensured_section
+
+            return normalized
+        except Exception:
+            return self._create_fallback_form(form_template, candidate_data)
 
     def _map_candidate_data_to_field(
         self, field_name: str, candidate_data: Dict[str, Any]
@@ -486,11 +510,18 @@ class AIFormFiller:
                 )
                 story.append(section_title)
 
-                # Section content
-                for field_name, field_value in section_data.items():
-                    if isinstance(field_value, (str, int, float)) and field_value:
-                        field_text = f"<b>{field_name.replace('_', ' ').title()}:</b> {field_value}"
-                        field_para = Paragraph(field_text, styles["Normal"])
+                # Section content (handle both dict and string sections)
+                if isinstance(section_data, dict):
+                    for field_name, field_value in section_data.items():
+                        if isinstance(field_value, (str, int, float)) and field_value:
+                            field_text = f"<b>{field_name.replace('_', ' ').title()}:</b> {field_value}"
+                            field_para = Paragraph(field_text, styles["Normal"])
+                            story.append(field_para)
+                            story.append(Spacer(1, 6))
+                else:
+                    # Render raw text for non-dict section content
+                    if isinstance(section_data, (str, int, float)) and section_data:
+                        field_para = Paragraph(str(section_data), styles["Normal"])
                         story.append(field_para)
                         story.append(Spacer(1, 6))
 
@@ -538,15 +569,20 @@ class AIFormFiller:
                 ws.cell(row=row, column=1).fill = header_fill
                 row += 1
 
-                # Section fields
-                for field_name, field_value in section_data.items():
-                    if isinstance(field_value, (str, int, float)) and field_value:
-                        ws.cell(
-                            row=row,
-                            column=1,
-                            value=field_name.replace("_", " ").title(),
-                        )
-                        ws.cell(row=row, column=2, value=str(field_value))
+                # Section fields (handle both dict and string sections)
+                if isinstance(section_data, dict):
+                    for field_name, field_value in section_data.items():
+                        if isinstance(field_value, (str, int, float)) and field_value:
+                            ws.cell(
+                                row=row,
+                                column=1,
+                                value=field_name.replace("_", " ").title(),
+                            )
+                            ws.cell(row=row, column=2, value=str(field_value))
+                            row += 1
+                else:
+                    if isinstance(section_data, (str, int, float)) and section_data:
+                        ws.cell(row=row, column=1, value=str(section_data))
                         row += 1
 
                 row += 1  # Empty row between sections
@@ -571,6 +607,39 @@ class AIFormFiller:
         except ImportError:
             logger.error("openpyxl not installed. Install with: pip install openpyxl")
             raise
+
+    def _call_openai_chat(self, prompt: str) -> str:
+        """Call OpenAI Chat Completions via REST and return the text response."""
+        try:
+            if not self.api_key or self.api_key == "your_openai_api_key_here":
+                logger.warning("OpenAI API key not provided, using fallback form")
+                return "{}"  # Return empty JSON to trigger fallback
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are an expert HR assistant that fills out forms based on candidate data. Be accurate and professional.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+            resp = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
         except Exception as e:
-            logger.error(f"Error exporting form to Excel: {e}")
-            raise
+            logger.error(f"Error calling OpenAI chat API: {e}")
+            return "{}"  # Return empty JSON to trigger fallback

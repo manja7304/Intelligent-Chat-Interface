@@ -146,26 +146,26 @@ Use natural language to interact with the system:
 ```mermaid
 flowchart TD
     U[HR User] --> UI[Streamlit Chat UI]
-    UI -->|Upload Resume (PDF)| RP[backend/resume_parser.py]
-    UI -->|LinkedIn URL| LS[backend/linkedin_scraper.py]
-    UI -->|Chat Commands| APP[app.py Controller]
+    UI -->|Upload Resume PDF| RP[Resume Parser]
+    UI -->|LinkedIn URL| LS[LinkedIn Scraper]
+    UI -->|Chat Commands| APP[App Controller]
 
-    RP --> MRG[Data Merge & Normalize]
+    RP --> MRG[Data Merge and Normalize]
     LS --> MRG
-    DB[(SQLite via backend/database_manager.py)] <--> MRG
+    DB[(SQLite Database)] <--> MRG
 
-    APP -->|Generate Form| AI[backend/ai_form_filler.py (OpenAI)]
+    APP -->|Generate Form| AI[AI Form Filler]
     MRG --> AI
 
-    AI --> OUT[Generated Forms (PDF/Excel)]
-    OUT --> EXP[exports/]
+    AI --> OUT[Generated Forms]
+    OUT --> EXP[Exports Folder]
     AI --> DB
     MRG --> DB
 
-    UI <-- Display/Download --> OUT
+    UI <-->|Display or Download| OUT
 
     subgraph Observability
-      LOG[logs/app.log]
+      LOG[Application Log]
     end
 
     LOG -.-> RP

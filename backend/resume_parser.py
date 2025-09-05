@@ -96,6 +96,7 @@ class ResumeParser:
             "name": "",
             "email": "",
             "phone": "",
+            "linkedin_url": "",
             "skills": [],
             "experience": [],
             "education": [],
@@ -109,6 +110,7 @@ class ResumeParser:
         # Extract contact information
         parsed_data["email"] = self._extract_email(text)
         parsed_data["phone"] = self._extract_phone(text)
+        parsed_data["linkedin_url"] = self._extract_linkedin_url(text)
         parsed_data["name"] = self._extract_name(text)
 
         # Extract skills
@@ -231,55 +233,267 @@ class ResumeParser:
         return skills
 
     def _extract_experience(self, text: str) -> List[Dict[str, str]]:
-        """Extract work experience from text"""
+        """Extract work experience from text with improved patterns"""
         experience = []
 
-        # Look for experience section
+        # Look for experience section with multiple possible headers
         exp_section = self._find_section(
-            text, ["experience", "work history", "employment", "career"]
+            text,
+            [
+                "experience",
+                "work history",
+                "employment",
+                "career",
+                "professional experience",
+                "work experience",
+            ],
         )
 
         if exp_section:
-            # Simple regex to extract job entries
-            job_pattern = r"([A-Za-z\s&,.-]+?)\s*[-–]\s*([A-Za-z\s&,.-]+?)\s*(\d{4})\s*[-–]\s*(\d{4}|present|current)"
-            matches = re.findall(job_pattern, exp_section, re.IGNORECASE | re.MULTILINE)
+            # Multiple patterns for different resume formats
+            job_patterns = [
+                # Pattern 1: Title | Company | Date
+                r"([^|\n]+)\s*\|\s*([^|\n]+)\s*\|\s*([^|\n]+)",
+                # Pattern 2: Title at Company (Date)
+                r"([^@\n]+)\s+at\s+([^(]+)\s*\(([^)]+)\)",
+                # Pattern 3: Company - Title (Date)
+                r"([^-]+)\s*-\s*([^(]+)\s*\(([^)]+)\)",
+                # Pattern 4: Title, Company, Date
+                r"([^,\n]+),\s*([^,\n]+),\s*([^,\n]+)",
+                # Pattern 5: Original pattern with dates
+                r"([A-Za-z\s&,.-]+?)\s*[-–]\s*([A-Za-z\s&,.-]+?)\s*(\d{4})\s*[-–]\s*(\d{4}|present|current)",
+                # Pattern 6: Simple title and company
+                r"([A-Z][^|\n@,]+)\s*\n\s*([A-Z][^|\n@,]+)",
+            ]
 
-            for match in matches:
-                experience.append(
-                    {
-                        "company": match[0].strip(),
-                        "position": match[1].strip(),
-                        "start_date": match[2].strip(),
-                        "end_date": match[3].strip(),
-                    }
+            for pattern in job_patterns:
+                matches = re.finditer(
+                    pattern, exp_section, re.MULTILINE | re.IGNORECASE
                 )
+
+                for match in matches:
+                    groups = match.groups()
+                    if len(groups) >= 2:
+                        if len(groups) == 3:
+                            # Pattern 1, 2, 3, 4
+                            title = groups[0].strip()
+                            company = groups[1].strip()
+                            date_range = groups[2].strip()
+                        elif len(groups) == 4:
+                            # Pattern 5 (original)
+                            company = groups[0].strip()
+                            title = groups[1].strip()
+                            start_date = groups[2].strip()
+                            end_date = groups[3].strip()
+                            date_range = f"{start_date} - {end_date}"
+                        else:
+                            # Pattern 6
+                            title = groups[0].strip()
+                            company = groups[1].strip()
+                            date_range = ""
+
+                        # Clean up extracted data
+                        title = re.sub(r"[•\-\*]", "", title).strip()
+                        company = re.sub(r"[•\-\*]", "", company).strip()
+                        date_range = re.sub(r"[•\-\*]", "", date_range).strip()
+
+                        # Skip if too short or contains unwanted text
+                        if len(title) < 3 or len(company) < 3:
+                            continue
+                        if any(
+                            word in title.lower()
+                            for word in [
+                                "experience",
+                                "work",
+                                "professional",
+                                "employment",
+                            ]
+                        ):
+                            continue
+
+                        experience.append(
+                            {
+                                "title": title,
+                                "company": company,
+                                "date_range": date_range,
+                            }
+                        )
+
+        # If no structured experience found, try to extract from general text
+        if not experience:
+            # Look for company names and job titles in the text
+            company_patterns = [
+                r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Inc|Corp|Ltd|LLC|Company|Technologies|Systems|Solutions)",
+                r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:Inc\.|Corp\.|Ltd\.|LLC\.)",
+            ]
+
+            for pattern in company_patterns:
+                companies = re.findall(pattern, text)
+                for company in companies[:3]:  # Limit to 3 companies
+                    # Look for job titles near this company
+                    company_context = re.search(
+                        rf".{{0,200}}{re.escape(company)}.{{0,200}}",
+                        text,
+                        re.IGNORECASE,
+                    )
+                    if company_context:
+                        context_text = company_context.group(0)
+                        # Look for common job titles
+                        job_titles = re.findall(
+                            r"(?:Senior\s+)?(?:Software\s+)?(?:Engineer|Developer|Analyst|Manager|Consultant|Specialist)",
+                            context_text,
+                            re.IGNORECASE,
+                        )
+                        if job_titles:
+                            experience.append(
+                                {
+                                    "title": job_titles[0],
+                                    "company": company,
+                                    "date_range": "",
+                                }
+                            )
 
         return experience
 
     def _extract_education(self, text: str) -> List[Dict[str, str]]:
-        """Extract education information from text"""
+        """Extract education information from text with improved patterns"""
         education = []
 
-        # Look for education section
+        # Look for education section with multiple possible headers
         edu_section = self._find_section(
-            text, ["education", "academic", "qualifications"]
+            text,
+            [
+                "education",
+                "academic",
+                "qualifications",
+                "academic background",
+                "educational background",
+            ],
         )
 
         if edu_section:
-            # Simple regex to extract education entries
-            edu_pattern = r"([A-Za-z\s&,.-]+?)\s*[-–]\s*([A-Za-z\s&,.-]+?)\s*(\d{4})"
-            matches = re.findall(edu_pattern, edu_section, re.IGNORECASE | re.MULTILINE)
+            # Multiple patterns for different education formats
+            edu_patterns = [
+                # Pattern 1: Degree from Institution (Year)
+                r"([A-Za-z\s&,.-]+?)\s+from\s+([A-Za-z\s&,.-]+?)\s*\((\d{4})\)",
+                # Pattern 2: Institution - Degree (Year)
+                r"([A-Za-z\s&,.-]+?)\s*[-–]\s*([A-Za-z\s&,.-]+?)\s*(\d{4})",
+                # Pattern 3: Degree, Institution, Year
+                r"([A-Za-z\s&,.-]+?),\s*([A-Za-z\s&,.-]+?),\s*(\d{4})",
+                # Pattern 4: Institution | Degree | Year
+                r"([^|\n]+)\s*\|\s*([^|\n]+)\s*\|\s*([^|\n]+)",
+                # Pattern 5: Simple degree and institution
+                r"(Bachelor|Master|PhD|Doctorate|Associate|Certificate|Diploma)[^,\n]*,\s*([^,\n]+)",
+                # Pattern 6: Institution (Year) - Degree
+                r"([A-Za-z\s&,.-]+?)\s*\((\d{4})\)\s*[-–]\s*([A-Za-z\s&,.-]+)",
+            ]
 
-            for match in matches:
-                education.append(
-                    {
-                        "institution": match[0].strip(),
-                        "degree": match[1].strip(),
-                        "year": match[2].strip(),
-                    }
+            for pattern in edu_patterns:
+                matches = re.finditer(
+                    pattern, edu_section, re.MULTILINE | re.IGNORECASE
                 )
 
+                for match in matches:
+                    groups = match.groups()
+                    if len(groups) >= 2:
+                        if len(groups) == 3:
+                            if (
+                                pattern == edu_patterns[0]
+                            ):  # Degree from Institution (Year)
+                                degree = groups[0].strip()
+                                institution = groups[1].strip()
+                                year = groups[2].strip()
+                            elif (
+                                pattern == edu_patterns[5]
+                            ):  # Institution (Year) - Degree
+                                institution = groups[0].strip()
+                                year = groups[1].strip()
+                                degree = groups[2].strip()
+                            else:  # Other 3-group patterns
+                                institution = groups[0].strip()
+                                degree = groups[1].strip()
+                                year = groups[2].strip()
+                        else:  # 2 groups
+                            degree = groups[0].strip()
+                            institution = groups[1].strip()
+                            year = ""
+
+                        # Clean up extracted data
+                        degree = re.sub(r"[•\-\*]", "", degree).strip()
+                        institution = re.sub(r"[•\-\*]", "", institution).strip()
+                        year = re.sub(r"[•\-\*]", "", year).strip()
+
+                        # Skip if too short or contains unwanted text
+                        if len(degree) < 3 or len(institution) < 3:
+                            continue
+                        if any(
+                            word in degree.lower()
+                            for word in ["education", "academic", "qualifications"]
+                        ):
+                            continue
+
+                        education.append(
+                            {
+                                "degree": degree,
+                                "institution": institution,
+                                "year": year,
+                            }
+                        )
+
+        # If no structured education found, try to extract from general text
+        if not education:
+            # Look for common degree patterns
+            degree_patterns = [
+                r"(Bachelor|Master|PhD|Doctorate|Associate|Certificate|Diploma)[^,\n]*",
+                r"(B\.?S\.?|M\.?S\.?|B\.?A\.?|M\.?A\.?|B\.?E\.?|M\.?E\.?)[^,\n]*",
+            ]
+
+            for pattern in degree_patterns:
+                degrees = re.findall(pattern, text, re.IGNORECASE)
+                for degree in degrees[:2]:  # Limit to 2 degrees
+                    # Look for institution near this degree
+                    degree_context = re.search(
+                        rf".{{0,200}}{re.escape(degree)}.{{0,200}}", text, re.IGNORECASE
+                    )
+                    if degree_context:
+                        context_text = degree_context.group(0)
+                        # Look for common institution patterns
+                        institutions = re.findall(
+                            r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:University|College|Institute|School)",
+                            context_text,
+                        )
+                        if institutions:
+                            education.append(
+                                {
+                                    "degree": degree,
+                                    "institution": institutions[0],
+                                    "year": "",
+                                }
+                            )
+
         return education
+
+    def _extract_linkedin_url(self, text: str) -> str:
+        """Extract LinkedIn profile URL with improved patterns"""
+        linkedin_patterns = [
+            r"linkedin\.com/in/[\w-]+",
+            r"linkedin\.com/pub/[\w-]+",
+            r"linkedin\.com/company/[\w-]+",
+            r"https?://linkedin\.com/in/[\w-]+",
+            r"https?://www\.linkedin\.com/in/[\w-]+",
+            r"linkedin\.com/in/[\w-]+/?",
+        ]
+
+        for pattern in linkedin_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                url = match.group(0)
+                # Ensure it starts with https://
+                if not url.startswith("http"):
+                    url = "https://" + url
+                return url
+
+        return ""
 
     def _extract_current_position(self, text: str) -> Dict[str, str]:
         """Extract current position and company"""

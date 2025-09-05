@@ -194,6 +194,20 @@ intelligent-chat-interface/
 └── logs/                           # Application logs
 ```
 
+## 📸 Screenshots
+
+- Home
+  <br/>
+  <img src="assets/screenshots/home.png" alt="Home" width="900">
+
+- Chat Interface
+  <br/>
+  <img src="assets/screenshots/chat.png" alt="Chat Interface" width="900">
+
+- Generated Form
+  <br/>
+  <img src="assets/screenshots/form.png" alt="Generated Form" width="900">
+
 ### Backend Modules
 
 #### DatabaseManager

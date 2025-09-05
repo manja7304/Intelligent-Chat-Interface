@@ -1,3 +1,27 @@
+import asyncio
+from playwright.async_api import async_playwright
+
+
+async def capture_screenshots(base_url: str = "http://localhost:8501") -> None:
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1440, "height": 900})
+
+        # Home page
+        await page.goto(base_url, wait_until="networkidle")
+        await page.screenshot(path="assets/screenshots/home.png", full_page=True)
+
+        # Optional: navigate to chat area if anchor exists
+        # Streamlit doesn't expose routes, but we can scroll for a broader view
+        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        await page.screenshot(path="assets/screenshots/chat.png", full_page=True)
+
+        await browser.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(capture_screenshots())
+
 #!/usr/bin/env python3
 """
 Demo script for the Intelligent Chat Interface

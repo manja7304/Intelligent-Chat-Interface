@@ -9,18 +9,40 @@ import pandas as pd
 from datetime import datetime
 import os
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_MODEL = "gpt-3.5-turbo"
+DEFAULT_MAX_TOKENS = 2000
+DEFAULT_TEMPERATURE = 0.7
+OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+DEFAULT_TIMEOUT_SECONDS = 60
 
 
 class AIFormFiller:
     """Uses AI to intelligently fill HR forms based on candidate data"""
 
-    def __init__(self, api_key: str):
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = DEFAULT_MODEL,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        temperature: float = DEFAULT_TEMPERATURE,
+        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+        session: Optional[requests.Session] = None,
+    ):
         self.api_key = api_key
-        self.model = "gpt-3.5-turbo"
-        self.max_tokens = 2000
-        self.temperature = 0.7
+        self.model = model
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.timeout_seconds = timeout_seconds
+
+        # Create or use provided HTTP session with retries
+        self.session = session or self._build_session_with_retries()
 
     def generate_hr_form(
         self, candidate_data: Dict[str, Any], form_template: Dict[str, Any]
@@ -73,6 +95,23 @@ class AIFormFiller:
             logger.error(f"Error generating HR form: {e}")
             raise
 
+    def _build_session_with_retries(self) -> requests.Session:
+        """Create a requests session configured with retries and backoff."""
+        session = requests.Session()
+        retry = Retry(
+            total=3,
+            read=3,
+            connect=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("POST", "GET"),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
+
     def _create_form_filling_prompt(
         self, candidate_data: Dict[str, Any], form_template: Dict[str, Any]
     ) -> str:
@@ -109,18 +148,25 @@ class AIFormFiller:
     ) -> Dict[str, Any]:
         """Parse AI response and structure it according to the form template"""
         try:
-            # Try to extract JSON from the response
+            # Prefer fenced JSON blocks if present
+            fenced_start = ai_response.find("```")
+            if fenced_start != -1:
+                fenced_end = ai_response.find("```", fenced_start + 3)
+                if fenced_end != -1:
+                    fenced_content = ai_response[fenced_start + 3 : fenced_end].strip()
+                    # Remove potential language hints like ```json
+                    if fenced_content.lower().startswith("json\n"):
+                        fenced_content = fenced_content[5:]
+                    return json.loads(fenced_content)
+
+            # Fallback: extract first JSON object heuristically
             json_start = ai_response.find("{")
             json_end = ai_response.rfind("}") + 1
-
             if json_start != -1 and json_end > json_start:
-                json_str = ai_response[json_start:json_end]
-                filled_form = json.loads(json_str)
-            else:
-                # Fallback: create form based on template structure
-                filled_form = self._create_fallback_form(form_template, candidate_data)
+                return json.loads(ai_response[json_start:json_end])
 
-            return filled_form
+            # If nothing parseable, create structured fallback
+            return self._create_fallback_form(form_template, candidate_data)
 
         except json.JSONDecodeError:
             logger.warning("Failed to parse AI response as JSON, using fallback")
@@ -172,13 +218,27 @@ class AIFormFiller:
 
             normalized: Dict[str, Any] = {}
             for section_name, fields in template_sections.items():
-                raw_section = filled_form.get(section_name, {})
+                # Accept case-insensitive matches for section names
+                raw_section = {}
+                for key, val in filled_form.items():
+                    if isinstance(key, str) and key.lower() == section_name.lower():
+                        raw_section = val
+                        break
+                if not raw_section:
+                    raw_section = filled_form.get(section_name, {})
                 if not isinstance(raw_section, dict):
                     raw_section = {"text": raw_section} if raw_section else {}
 
                 ensured_section: Dict[str, Any] = {}
                 for field_key, field_cfg in fields.items():
-                    val = raw_section.get(field_key)
+                    # Case-insensitive field matching
+                    val = None
+                    for rk, rv in raw_section.items():
+                        if isinstance(rk, str) and rk.lower() == field_key.lower():
+                            val = rv
+                            break
+                    if val is None:
+                        val = raw_section.get(field_key)
                     if isinstance(val, (str, int, float)) and val is not None:
                         ensured_section[field_key] = val
                     else:
@@ -631,11 +691,11 @@ class AIFormFiller:
                 "max_tokens": self.max_tokens,
                 "temperature": self.temperature,
             }
-            resp = requests.post(
-                "https://api.openai.com/v1/chat/completions",
+            resp = self.session.post(
+                OPENAI_CHAT_COMPLETIONS_URL,
                 headers=headers,
                 json=payload,
-                timeout=60,
+                timeout=self.timeout_seconds,
             )
             resp.raise_for_status()
             data = resp.json()

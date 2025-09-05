@@ -141,6 +141,39 @@ Use natural language to interact with the system:
 
 ## 🏗️ Architecture
 
+## 🧭 Project Workflow
+
+```mermaid
+flowchart TD
+    U[HR User] --> UI[Streamlit Chat UI]
+    UI -->|Upload Resume (PDF)| RP[backend/resume_parser.py]
+    UI -->|LinkedIn URL| LS[backend/linkedin_scraper.py]
+    UI -->|Chat Commands| APP[app.py Controller]
+
+    RP --> MRG[Data Merge & Normalize]
+    LS --> MRG
+    DB[(SQLite via backend/database_manager.py)] <--> MRG
+
+    APP -->|Generate Form| AI[backend/ai_form_filler.py (OpenAI)]
+    MRG --> AI
+
+    AI --> OUT[Generated Forms (PDF/Excel)]
+    OUT --> EXP[exports/]
+    AI --> DB
+    MRG --> DB
+
+    UI <-- Display/Download --> OUT
+
+    subgraph Observability
+      LOG[logs/app.log]
+    end
+
+    LOG -.-> RP
+    LOG -.-> LS
+    LOG -.-> AI
+    LOG -.-> APP
+```
+
 ### Project Structure
 ```
 intelligent-chat-interface/

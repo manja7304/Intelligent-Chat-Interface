@@ -200,11 +200,11 @@ intelligent-chat-interface/
   <br/>
   <img src="assets/screenshots/home.png" alt="Home" width="900">
 
-- Chat Interface
+- Chat Interface & Resume Parser
   <br/>
   <img src="assets/screenshots/chat.png" alt="Chat Interface" width="900">
 
-- Generated Form
+- Linkedin Information Extractor
   <br/>
   <img src="assets/screenshots/form.png" alt="Generated Form" width="900">
 

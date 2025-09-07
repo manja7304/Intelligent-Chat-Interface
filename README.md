@@ -7,8 +7,19 @@
 
 A comprehensive AI-powered system for HR professionals to automate candidate profiling, resume parsing, LinkedIn data extraction, and intelligent form generation.
 
-## 📑 Table of Contents
+## 📄 Project Documentation
 
+**📋 Complete Project Documentation PDF Available!**
+
+For a comprehensive overview of the project, including detailed technical architecture, API error handling, database schema, troubleshooting guide, and future enhancements, please refer to our complete project documentation:
+
+**[📖 Download Complete Project Documentation (PDF)](Intelligent_Chat_Interface_Project_Documentation.pdf)**
+
+*This PDF contains 13 comprehensive sections covering all aspects of the project, including screenshots, technical details, and implementation guides.*
+
+## 📑 Table of Content
+
+- [Project Documentation](#-project-documentation)
 - [Features](#-features)
 - [Screenshots](#-screenshots)
 - [Requirements](#-requirements)
@@ -40,6 +51,7 @@ A comprehensive AI-powered system for HR professionals to automate candidate pro
 - **Error Handling**: Comprehensive logging and error management
 - **Caching**: Optimized performance with Streamlit caching
 - **API Integration**: OpenAI GPT models for intelligent form filling
+- **Complete Documentation**: Comprehensive PDF documentation with technical details and screenshots
 
 ## 📋 Requirements
 
@@ -318,6 +330,8 @@ Edit `config.py` to modify:
 - Generation timestamps
 
 ## 🚨 Troubleshooting
+
+> **📖 For detailed troubleshooting information, API error handling, and performance optimization tips, please refer to the [Complete Project Documentation PDF](Intelligent_Chat_Interface_Project_Documentation.pdf).**
 
 ### Common Issues
 

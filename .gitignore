@@ -59,9 +59,18 @@ logs/
 # Exports
 exports/
 *.pdf
+!Intelligent_Chat_Interface_Project_Documentation.pdf
 *.xlsx
 *.xls
 
 # Temporary files
 *.tmp
 *.temp
+
+# Utility scripts (not needed in repository)
+generate_project_pdf.py
+update_pdf_references.py
+
+# Documentation files (can be generated)
+USER_GUIDE.md
+PDF_INFO.md

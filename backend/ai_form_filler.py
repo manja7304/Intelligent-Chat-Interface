@@ -266,6 +266,35 @@ class AIFormFiller:
         self, field_name: str, candidate_data: Dict[str, Any]
     ) -> str:
         """Map candidate data to form field names"""
+
+        # Helper function to safely parse JSON strings
+        def safe_parse_json(data, default=None):
+            if default is None:
+                default = []
+            if isinstance(data, str):
+                try:
+                    import json
+
+                    return json.loads(data)
+                except (json.JSONDecodeError, TypeError):
+                    return default
+            return data if data is not None else default
+
+        # Get experience data (handle both list and string formats)
+        experience_data = candidate_data.get("experience", [])
+        if isinstance(experience_data, str):
+            experience_data = safe_parse_json(experience_data, [])
+
+        # Get education data (handle both list and string formats)
+        education_data = candidate_data.get("education", [])
+        if isinstance(education_data, str):
+            education_data = safe_parse_json(education_data, [])
+
+        # Get skills data (handle both list and string formats)
+        skills_data = candidate_data.get("skills", [])
+        if isinstance(skills_data, str):
+            skills_data = safe_parse_json(skills_data, [])
+
         field_mapping = {
             "full_name": candidate_data.get("name", ""),
             "email": candidate_data.get("email", ""),
@@ -275,18 +304,38 @@ class AIFormFiller:
             "current_position": candidate_data.get("current_position", ""),
             "current_company": candidate_data.get("current_company", ""),
             "experience_years": candidate_data.get("experience_years", ""),
-            "technical_skills": ", ".join(candidate_data.get("skills", [])),
-            "work_experience": ", ".join(
-                [
-                    exp.get("title", "") + " at " + exp.get("company", "")
-                    for exp in candidate_data.get("experience", [])
-                ]
+            "technical_skills": ", ".join(skills_data) if skills_data else "",
+            "work_experience": (
+                ", ".join(
+                    [
+                        (
+                            (exp.get("title", "") + " at " + exp.get("company", ""))
+                            if isinstance(exp, dict)
+                            else str(exp)
+                        )
+                        for exp in experience_data
+                    ]
+                )
+                if experience_data
+                else ""
             ),
-            "education": ", ".join(
-                [
-                    edu.get("degree", "") + " from " + edu.get("institution", "")
-                    for edu in candidate_data.get("education", [])
-                ]
+            "education": (
+                ", ".join(
+                    [
+                        (
+                            (
+                                edu.get("degree", "")
+                                + " from "
+                                + edu.get("institution", "")
+                            )
+                            if isinstance(edu, dict)
+                            else str(edu)
+                        )
+                        for edu in education_data
+                    ]
+                )
+                if education_data
+                else ""
             ),
         }
 

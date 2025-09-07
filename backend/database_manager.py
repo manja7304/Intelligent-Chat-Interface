@@ -36,8 +36,9 @@ class DatabaseManager:
                         linkedin_url TEXT,
                         resume_path TEXT,
                         skills TEXT,  -- JSON string
+                        experience TEXT,  -- JSON string
                         experience_years INTEGER,
-                        education TEXT,
+                        education TEXT,  -- JSON string
                         current_position TEXT,
                         current_company TEXT,
                         location TEXT,
@@ -111,9 +112,9 @@ class DatabaseManager:
                     """
                     INSERT INTO candidates (
                         name, email, phone, linkedin_url, resume_path, skills,
-                        experience_years, education, current_position, 
+                        experience, experience_years, education, current_position, 
                         current_company, location
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         candidate_data.get("name"),
@@ -122,6 +123,7 @@ class DatabaseManager:
                         candidate_data.get("linkedin_url"),
                         candidate_data.get("resume_path"),
                         skills_json,
+                        experience_json,
                         candidate_data.get("experience_years"),
                         education_json,
                         candidate_data.get("current_position"),
@@ -158,11 +160,25 @@ class DatabaseManager:
                     columns = [description[0] for description in cursor.description]
                     candidate_data = dict(zip(columns, row))
 
-                    # Parse skills JSON
+                    # Parse JSON fields
                     if candidate_data["skills"]:
                         candidate_data["skills"] = json.loads(candidate_data["skills"])
                     else:
                         candidate_data["skills"] = []
+
+                    if candidate_data["education"]:
+                        candidate_data["education"] = json.loads(
+                            candidate_data["education"]
+                        )
+                    else:
+                        candidate_data["education"] = []
+
+                    if candidate_data["experience"]:
+                        candidate_data["experience"] = json.loads(
+                            candidate_data["experience"]
+                        )
+                    else:
+                        candidate_data["experience"] = []
 
                     return candidate_data
                 return None
@@ -199,10 +215,27 @@ class DatabaseManager:
                 candidates = []
                 for row in rows:
                     candidate_data = dict(zip(columns, row))
+
+                    # Parse JSON fields
                     if candidate_data["skills"]:
                         candidate_data["skills"] = json.loads(candidate_data["skills"])
                     else:
                         candidate_data["skills"] = []
+
+                    if candidate_data["education"]:
+                        candidate_data["education"] = json.loads(
+                            candidate_data["education"]
+                        )
+                    else:
+                        candidate_data["education"] = []
+
+                    if candidate_data["experience"]:
+                        candidate_data["experience"] = json.loads(
+                            candidate_data["experience"]
+                        )
+                    else:
+                        candidate_data["experience"] = []
+
                     candidates.append(candidate_data)
 
                 return candidates
@@ -331,10 +364,27 @@ class DatabaseManager:
                 candidates = []
                 for row in rows:
                     candidate_data = dict(zip(columns, row))
+
+                    # Parse JSON fields
                     if candidate_data["skills"]:
                         candidate_data["skills"] = json.loads(candidate_data["skills"])
                     else:
                         candidate_data["skills"] = []
+
+                    if candidate_data["education"]:
+                        candidate_data["education"] = json.loads(
+                            candidate_data["education"]
+                        )
+                    else:
+                        candidate_data["education"] = []
+
+                    if candidate_data["experience"]:
+                        candidate_data["experience"] = json.loads(
+                            candidate_data["experience"]
+                        )
+                    else:
+                        candidate_data["experience"] = []
+
                     candidates.append(candidate_data)
 
                 return candidates

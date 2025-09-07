@@ -90,7 +90,9 @@ class LinkedInScraper:
                 "type": "people",
             }
 
-            response = requests.get("https://serpapi.com/search", params=params)
+            response = requests.get(
+                "https://serpapi.com/search", params=params, timeout=20
+            )
             try:
                 response.raise_for_status()
             except requests.HTTPError as http_err:
@@ -166,7 +168,9 @@ class LinkedInScraper:
                 "url": profile_url,
             }
 
-            response = requests.get("https://serpapi.com/search", params=params)
+            response = requests.get(
+                "https://serpapi.com/search", params=params, timeout=20
+            )
             try:
                 response.raise_for_status()
             except requests.HTTPError as http_err:

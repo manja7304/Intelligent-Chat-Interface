@@ -9,6 +9,7 @@ import re
 import spacy
 from typing import Dict, List, Optional, Any
 import json
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class ResumeParser:
 
             # Parse the extracted text
             parsed_data = self._parse_text(text)
+            parsed_data = self._post_process(parsed_data)
             parsed_data["resume_path"] = file_path
             parsed_data["raw_text"] = text
 
@@ -138,6 +140,23 @@ class ResumeParser:
 
         return parsed_data
 
+    def _post_process(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Finalize and sanitize parsed fields (skills, experience years, name)."""
+        # Name
+        if isinstance(data.get("name"), str):
+            data["name"] = data["name"].strip()
+
+        # Skills cleanup
+        data["skills"] = self._normalize_skills(data.get("skills", []))
+
+        # Experience years clamp (0..60)
+        try:
+            years = int(data.get("experience_years", 0))
+        except Exception:
+            years = 0
+        data["experience_years"] = max(0, min(60, years))
+        return data
+
     def _extract_email(self, text: str) -> str:
         """Extract email address from text"""
         email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
@@ -210,7 +229,46 @@ class ResumeParser:
 
         # Clean and deduplicate skills
         skills = list(set([skill.strip() for skill in skills if skill.strip()]))
-        return skills[:20]  # Limit to top 20 skills
+        # Defer deeper normalization to _normalize_skills
+        return self._normalize_skills(skills)[:20]
+
+    def _normalize_skills(self, skills: List[str]) -> List[str]:
+        """Normalize skills list (casing, stopwords, aliases, dedup)."""
+        stopwords = {
+            "and",
+            "or",
+            "the",
+            "a",
+            "an",
+            "service",
+            "university",
+            "hands",
+            "years",
+            "experience",
+            "skill",
+            "skills",
+        }
+        preserve_upper = {"AWS", "SQL", "NLP", "API", "CI/CD", "HTML", "CSS"}
+        aliases = {"js": "JavaScript", "py": "Python"}
+
+        normalized: List[str] = []
+        seen = set()
+        for item in skills:
+            token = (item or "").strip()
+            if not token:
+                continue
+            low = token.lower()
+            if low in aliases:
+                token = aliases[low]
+                low = token.lower()
+            if low in stopwords:
+                continue
+            token_cased = token if token.upper() in preserve_upper else token.title()
+            key = token_cased.lower()
+            if key not in seen:
+                seen.add(key)
+                normalized.append(token_cased)
+        return normalized
 
     def _extract_skills_spacy(self, text: str) -> List[str]:
         """Extract skills using spaCy NLP"""
@@ -557,28 +615,71 @@ class ResumeParser:
         return ""
 
     def _calculate_experience_years(self, experience: List[Dict[str, str]]) -> int:
-        """Calculate total years of experience"""
+        """Calculate total years of experience from date ranges and year hints."""
         if not experience:
             return 0
 
-        total_years = 0
-        current_year = 2024
-
-        for exp in experience:
+        def parse_year(y: str) -> Optional[int]:
             try:
-                start_year = int(exp.get("start_date", "0"))
-                end_year = exp.get("end_date", "").lower()
+                return int(y)
+            except Exception:
+                return None
 
-                if end_year in ["present", "current", ""]:
-                    end_year = current_year
-                else:
-                    end_year = int(end_year)
+        month_map = {
+            m.lower(): i
+            for i, m in enumerate(
+                [
+                    "jan",
+                    "feb",
+                    "mar",
+                    "apr",
+                    "may",
+                    "jun",
+                    "jul",
+                    "aug",
+                    "sep",
+                    "oct",
+                    "nov",
+                    "dec",
+                ],
+                start=1,
+            )
+        }
 
-                years = end_year - start_year
-                if years > 0:
-                    total_years += years
+        def parse_date_fragment(s: str) -> Optional[datetime]:
+            s = (s or "").strip().lower()
+            if not s:
+                return None
+            # Try formats like Jan 2020, 2020, 2020-05
+            year = None
+            month = 1
+            m = re.search(r"(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)", s)
+            if m:
+                month = month_map.get(m.group(1), 1)
+            y = re.search(r"(19\d{2}|20\d{2})", s)
+            if y:
+                year = int(y.group(1))
+            if year:
+                try:
+                    return datetime(year, month, 1)
+                except Exception:
+                    return None
+            return None
 
-            except (ValueError, TypeError):
-                continue
+        total_months = 0
+        now = datetime.utcnow()
+        for exp in experience:
+            dr = exp.get("date_range", "")
+            if dr:
+                parts = re.split(r"\s*[-–]\s*", dr)
+                start = parse_date_fragment(parts[0] if parts else "")
+                end = parse_date_fragment(parts[1]) if len(parts) > 1 else None
+                if end is None:
+                    end = now
+                if start and end and end > start:
+                    months = (end.year - start.year) * 12 + (end.month - start.month)
+                    if months > 0:
+                        total_months += months
 
-        return max(0, total_years)
+        years = total_months // 12
+        return max(0, min(60, years))

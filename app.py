@@ -10,6 +10,8 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any
 import pandas as pd
+import re
+from functools import lru_cache
 
 # Import backend modules
 from backend.database_manager import DatabaseManager
@@ -100,6 +102,156 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+
+@st.cache_data(show_spinner=False)
+def cached_parse_resume(file_path: str) -> Dict[str, Any]:
+    parser = ResumeParser()
+    return parser.parse_resume(file_path)
+
+
+@st.cache_data(show_spinner=False)
+def cached_linkedin_profile(url: str) -> Dict[str, Any]:
+    scraper = LinkedInScraper(
+        email=os.getenv("LINKEDIN_EMAIL", ""),
+        password=os.getenv("LINKEDIN_PASSWORD", ""),
+        serpapi_key=os.getenv("SERPAPI_KEY", ""),
+    )
+    return scraper.get_profile_data(url)
+
+
+try:
+    from email_validator import validate_email as _ev_validate, EmailNotValidError
+except Exception:
+    _ev_validate = None
+    EmailNotValidError = Exception
+
+try:
+    import phonenumbers as _phonenumbers
+except Exception:
+    _phonenumbers = None
+
+
+def _validate_email(email: Any) -> str:
+    """Return a valid email or empty string if invalid."""
+    if not isinstance(email, str):
+        return ""
+    email = email.strip()
+    if _ev_validate:
+        try:
+            return _ev_validate(email, check_deliverability=False).email
+        except EmailNotValidError:
+            return ""
+    pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+    return email if re.match(pattern, email) else ""
+
+
+def _normalize_phone(phone: Any) -> str:
+    """Normalize phone using phonenumbers when available; fallback to digits check."""
+    if not isinstance(phone, str):
+        phone = str(phone) if phone is not None else ""
+    phone = phone.strip()
+    if _phonenumbers:
+        try:
+            # Try parsing without region; then fallback to IN/US common regions as examples
+            for region in [None, "IN", "US", "GB"]:
+                try:
+                    num = (
+                        _phonenumbers.parse(phone, region)
+                        if region
+                        else _phonenumbers.parse(phone)
+                    )
+                    if _phonenumbers.is_possible_number(
+                        num
+                    ) and _phonenumbers.is_valid_number(num):
+                        return _phonenumbers.format_number(
+                            num, _phonenumbers.PhoneNumberFormat.E164
+                        )
+                except Exception:
+                    continue
+        except Exception:
+            pass
+    digits = re.sub(r"[^0-9+]", "", phone)
+    if digits.count("+") > 1:
+        digits = digits.replace("+", "")
+    just_digits = re.sub(r"[^0-9]", "", digits)
+    return digits if len(just_digits) >= 7 else ""
+
+
+def _normalize_skills(skills: Any) -> List[str]:
+    """Ensure skills is a clean list of distinct, title-cased tokens, removing obvious non-skills."""
+    normalized: List[str] = []
+    if isinstance(skills, str):
+        # split on commas or semicolons
+        parts = re.split(r"[;,]", skills)
+    elif isinstance(skills, list):
+        parts = skills
+    else:
+        parts = []
+
+    seen = set()
+    stopwords = {
+        "and",
+        "or",
+        "the",
+        "a",
+        "an",
+        "service",
+        "university",
+        "hands",
+        "years",
+        "experience",
+        "skill",
+        "skills",
+    }
+    for part in parts:
+        if not isinstance(part, str):
+            part = str(part)
+        token = part.strip()
+        if not token:
+            continue
+        # drop obviously non-skill numeric tokens
+        if re.fullmatch(r"[0-9.]+", token):
+            continue
+        if token.strip().lower() in stopwords:
+            continue
+        # keep common tech casing (e.g., AWS, SQL, NLP)
+        preserve_upper = {"AWS", "SQL", "NLP", "API", "CI/CD", "HTML", "CSS"}
+        token_cased = token if token.upper() in preserve_upper else token.title()
+        if token_cased.lower() not in seen:
+            seen.add(token_cased.lower())
+            normalized.append(token_cased)
+    return normalized
+
+
+def _clamp_experience_years(value: Any, min_years: int = 0, max_years: int = 60) -> int:
+    """Convert to int and clamp to a realistic range."""
+    try:
+        if isinstance(value, str):
+            # extract first integer in the string
+            m = re.search(r"-?\d+", value)
+            value = int(m.group(0)) if m else 0
+        else:
+            value = int(value)
+    except Exception:
+        value = 0
+    return max(min_years, min(max_years, value))
+
+
+def normalize_candidate_data(candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and normalize candidate fields in-place and return the dict."""
+    if not isinstance(candidate, dict):
+        return {}
+    candidate["email"] = _validate_email(candidate.get("email"))
+    candidate["phone"] = _normalize_phone(candidate.get("phone"))
+    candidate["skills"] = _normalize_skills(candidate.get("skills", []))
+    candidate["experience_years"] = _clamp_experience_years(
+        candidate.get("experience_years", 0)
+    )
+    # Basic name cleanup
+    if isinstance(candidate.get("name"), str):
+        candidate["name"] = candidate["name"].strip()
+    return candidate
 
 
 def process_user_input(
@@ -329,7 +481,8 @@ with col1:
                         f.write(uploaded_file.getbuffer())
 
                     # Parse resume
-                    candidate_data = resume_parser.parse_resume(file_path)
+                    candidate_data = cached_parse_resume(file_path)
+                    candidate_data = normalize_candidate_data(candidate_data)
 
                     # Add to database
                     candidate_id = db_manager.add_candidate(candidate_data)
@@ -338,10 +491,22 @@ with col1:
                     st.session_state.current_candidate = candidate_data
                     if not hasattr(st.session_state, "messages"):
                         st.session_state.messages = []
+                    top_skills = (
+                        ", ".join(candidate_data.get("skills", [])[:5]) or "N/A"
+                    )
+                    email_str = candidate_data.get("email") or "N/A"
+                    phone_str = candidate_data.get("phone") or "N/A"
+                    years = candidate_data.get("experience_years", 0)
                     st.session_state.messages.append(
                         {
                             "role": "assistant",
-                            "content": f"✅ Successfully parsed resume for **{candidate_data['name']}**!\n\n**Extracted Information:**\n- Email: {candidate_data.get('email', 'N/A')}\n- Phone: {candidate_data.get('phone', 'N/A')}\n- Skills: {', '.join(candidate_data.get('skills', [])[:5])}\n- Experience: {candidate_data.get('experience_years', 0)} years",
+                            "content": (
+                                f"✅ Resume parsed for **{candidate_data['name']}**.\n\n"
+                                f"- Email: {email_str}\n"
+                                f"- Phone: {phone_str}\n"
+                                f"- Top skills: {top_skills}\n"
+                                f"- Experience: {years} year{'s' if years != 1 else ''}"
+                            ),
                         }
                     )
 
@@ -361,7 +526,17 @@ with col2:
         if linkedin_url:
             with st.spinner("Extracting LinkedIn data..."):
                 try:
-                    linkedin_data = linkedin_scraper.get_profile_data(linkedin_url)
+                    linkedin_data = cached_linkedin_profile(linkedin_url)
+                    linkedin_data = normalize_candidate_data(linkedin_data)
+                    # If we already have a current candidate (likely from resume), merge
+                    if (
+                        hasattr(st.session_state, "current_candidate")
+                        and st.session_state.current_candidate
+                    ):
+                        merged = linkedin_scraper.merge_with_resume_data(
+                            linkedin_data, st.session_state.current_candidate
+                        )
+                        linkedin_data = normalize_candidate_data(merged)
 
                     if linkedin_data:
                         # Add to database
@@ -371,10 +546,19 @@ with col2:
                         st.session_state.current_candidate = linkedin_data
                         if not hasattr(st.session_state, "messages"):
                             st.session_state.messages = []
+                        top_skills = (
+                            ", ".join(linkedin_data.get("skills", [])[:5]) or "N/A"
+                        )
                         st.session_state.messages.append(
                             {
                                 "role": "assistant",
-                                "content": f"✅ Successfully extracted LinkedIn data for **{linkedin_data['name']}**!\n\n**Profile Information:**\n- Title: {linkedin_data.get('title', 'N/A')}\n- Company: {linkedin_data.get('company', 'N/A')}\n- Location: {linkedin_data.get('location', 'N/A')}\n- Skills: {', '.join(linkedin_data.get('skills', [])[:5])}",
+                                "content": (
+                                    f"✅ LinkedIn data added for **{linkedin_data['name']}**.\n\n"
+                                    f"- Title: {linkedin_data.get('title', 'N/A')}\n"
+                                    f"- Company: {linkedin_data.get('company', 'N/A')}\n"
+                                    f"- Location: {linkedin_data.get('location', 'N/A')}\n"
+                                    f"- Top skills: {top_skills}"
+                                ),
                             }
                         )
 

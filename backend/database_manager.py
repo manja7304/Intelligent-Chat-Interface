@@ -48,6 +48,15 @@ class DatabaseManager:
                 """
                 )
 
+                # Add unique index on email if not exists (ignore NULL emails)
+                try:
+                    cursor.execute(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email)"
+                    )
+                except Exception as _:
+                    # Older SQLite may not support partial indexes; best-effort
+                    pass
+
                 # Skills table for normalized skill storage
                 cursor.execute(
                     """
@@ -103,37 +112,67 @@ class DatabaseManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
 
+                # If email is present, try to find existing candidate to avoid duplicates
+                email = candidate_data.get("email")
+                existing_id = None
+                if email:
+                    cursor.execute(
+                        "SELECT id FROM candidates WHERE email = ?", (email,)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        existing_id = row[0]
+
                 # Convert lists to JSON strings
                 skills_json = json.dumps(candidate_data.get("skills", []))
                 education_json = json.dumps(candidate_data.get("education", []))
                 experience_json = json.dumps(candidate_data.get("experience", []))
 
-                cursor.execute(
-                    """
-                    INSERT INTO candidates (
-                        name, email, phone, linkedin_url, resume_path, skills,
-                        experience, experience_years, education, current_position, 
-                        current_company, location
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        candidate_data.get("name"),
-                        candidate_data.get("email"),
-                        candidate_data.get("phone"),
-                        candidate_data.get("linkedin_url"),
-                        candidate_data.get("resume_path"),
-                        skills_json,
-                        experience_json,
-                        candidate_data.get("experience_years"),
-                        education_json,
-                        candidate_data.get("current_position"),
-                        candidate_data.get("current_company"),
-                        candidate_data.get("location"),
-                    ),
-                )
+                if existing_id:
+                    # Merge minimal fields and update
+                    update_data = {
+                        "name": candidate_data.get("name"),
+                        "phone": candidate_data.get("phone"),
+                        "linkedin_url": candidate_data.get("linkedin_url"),
+                        "resume_path": candidate_data.get("resume_path"),
+                        "skills": json.loads(skills_json),
+                        "experience": json.loads(experience_json),
+                        "experience_years": candidate_data.get("experience_years"),
+                        "education": json.loads(education_json),
+                        "current_position": candidate_data.get("current_position"),
+                        "current_company": candidate_data.get("current_company"),
+                        "location": candidate_data.get("location"),
+                    }
+                    # Reuse existing update method to handle JSON and timestamps
+                    self.update_candidate(existing_id, update_data)
+                    candidate_id = existing_id
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO candidates (
+                            name, email, phone, linkedin_url, resume_path, skills,
+                            experience, experience_years, education, current_position, 
+                            current_company, location
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                        (
+                            candidate_data.get("name"),
+                            candidate_data.get("email"),
+                            candidate_data.get("phone"),
+                            candidate_data.get("linkedin_url"),
+                            candidate_data.get("resume_path"),
+                            skills_json,
+                            experience_json,
+                            candidate_data.get("experience_years"),
+                            education_json,
+                            candidate_data.get("current_position"),
+                            candidate_data.get("current_company"),
+                            candidate_data.get("location"),
+                        ),
+                    )
 
-                candidate_id = cursor.lastrowid
-                conn.commit()
+                    candidate_id = cursor.lastrowid
+                    conn.commit()
 
                 # Add skills to normalized tables
                 if candidate_data.get("skills"):

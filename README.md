@@ -40,7 +40,7 @@ For a comprehensive overview of the project, including detailed technical archit
 - **Conversational Chat Interface**: Natural language interaction for HR tasks
 - **Resume Parsing**: Extract structured data from PDF resumes using NLP
 - **LinkedIn Integration**: Scrape candidate profiles and merge with resume data
-- **AI-Powered Form Generation**: Automatically populate HR forms using OpenAI
+- **AI-Powered Form Generation**: Automatically populate HR forms using OpenRouter (default)
 - **Intelligent Data Merging**: Combine resume and LinkedIn data intelligently
 - **Export Capabilities**: Generate PDF and Excel reports
 - **Database Management**: SQLite-based candidate data storage
@@ -50,7 +50,7 @@ For a comprehensive overview of the project, including detailed technical archit
 - **Modular Architecture**: Well-structured backend with OOP principles
 - **Error Handling**: Comprehensive logging and error management
 - **Caching**: Optimized performance with Streamlit caching
-- **API Integration**: OpenAI GPT models for intelligent form filling
+- **API Integration**: OpenRouter chat/completions for intelligent form filling and chat
 - **Complete Documentation**: Comprehensive PDF documentation with technical details and screenshots
 
 ## 📋 Requirements
@@ -60,8 +60,9 @@ For a comprehensive overview of the project, including detailed technical archit
 - 4GB RAM minimum
 - 1GB free disk space
 
-### API Keys Required
-- **OpenAI API Key** (Required for AI features)
+### API Keys / Providers
+- **AI Provider**: Default is `openrouter`
+- **OpenRouter API Key** (Required)
 - **SerpAPI Key** (Optional, for enhanced LinkedIn scraping)
 - **LinkedIn Credentials** (Optional, for direct LinkedIn access)
 
@@ -106,8 +107,22 @@ cp .env.example .env
 
 2. Edit the `.env` file and add your API keys:
 ```env
-# OpenAI API Configuration (Required for AI features)
+# AI Provider selection (default: openrouter)
+AI_PROVIDER=openrouter
+
+# If using OpenAI
 OPENAI_API_KEY=your_actual_openai_api_key_here
+
+# If using Ollama (runs locally)
+OLLAMA_HOST=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.1:8b-instruct
+
+# If using OpenRouter
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL=openrouter/auto
+OPENROUTER_API_URL=https://openrouter.ai/api/v1/chat/completions
+OPENROUTER_SITE_URL=http://localhost:8501
+OPENROUTER_APP_TITLE=Intelligent Chat Interface
 
 # LinkedIn API Configuration (Optional)
 LINKEDIN_EMAIL=your_linkedin_email@example.com
@@ -158,10 +173,10 @@ streamlit run app.py
 ```
 
 ### First Steps
-1. **Access Interface**: Open `http://localhost:8501` in your browser
-2. **Configure API Keys**: Enter OpenAI API key in the sidebar
+1. **Access Interface**: Open `http://localhost:8501` (or your chosen port)
+2. **Configure**: Ensure `OPENROUTER_API_KEY` is set in `.env`
 3. **Upload Resume**: Test with a PDF resume file
-4. **Try Chat**: Use natural language commands like "Generate a form"
+4. **Try Chat**: Ask general questions in chat (OpenRouter-powered)
 5. **Export Results**: Download generated forms as PDF/Excel
 
 ### Demo Mode
@@ -184,7 +199,7 @@ python demo.py
 3. Review the extracted profile information
 4. The system will automatically merge with resume data if available
 
-### Chat Interface
+### Chat Interface (OpenRouter-powered)
 Use natural language to interact with the system:
 - "Search for Python developers"
 - "Generate a form for the current candidate"
@@ -267,6 +282,10 @@ intelligent-chat-interface/
   <br/>
   <img src="assets/screenshots/form.png" alt="Generated Form" width="900">
 
+- Candidate Fit Assessment
+  <br/>
+  <img src="assets/screenshots/Candidate fit Assessment.png" alt="Candidate Fit Assessment" width="900">
+
 ### Backend Modules
 
 #### DatabaseManager
@@ -288,7 +307,7 @@ intelligent-chat-interface/
 - Data merging with resume information
 
 #### AIFormFiller
-- OpenAI GPT integration for intelligent form filling
+- OpenRouter integration for intelligent form filling and chat
 - Multiple form template support
 - PDF and Excel export capabilities
 - Professional form generation
@@ -298,7 +317,12 @@ intelligent-chat-interface/
 ### Environment Variables
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for AI features | Yes |
+| `AI_PROVIDER` | `openrouter` (default) | Yes |
+| `OPENROUTER_API_KEY` | OpenRouter API key | Yes |
+| `OPENROUTER_MODEL` | Model name (e.g., `openrouter/auto`) | No |
+| `OPENROUTER_API_URL` | API endpoint URL | No |
+| `OPENROUTER_SITE_URL` | Your app/site URL (for routing) | No |
+| `OPENROUTER_APP_TITLE` | App title sent to OpenRouter | No |
 | `SERPAPI_KEY` | SerpAPI key for LinkedIn scraping | No |
 | `LINKEDIN_EMAIL` | LinkedIn account email | No |
 | `LINKEDIN_PASSWORD` | LinkedIn account password | No |
@@ -335,17 +359,16 @@ Edit `config.py` to modify:
 
 ### Common Issues
 
-#### 1. OpenAI API Errors
+#### 1. OpenRouter API Errors
 ```
-Error: OpenAI API key not found
+Error: OpenRouter API key not found
 Error: Rate limit exceeded
 Error: Invalid API key
 ```
 **Solutions**:
-- Verify API key in `.env` file or sidebar
-- Check API key has sufficient credits
-- Ensure key has access to GPT-3.5-turbo model
-- Try reducing request frequency
+- Verify `OPENROUTER_API_KEY` in `.env`
+- Check model name is valid (`OPENROUTER_MODEL`)
+- Reduce request frequency
 
 #### 2. PDF Parsing Issues
 ```
@@ -402,10 +425,8 @@ Error: Virtual environment issues
 - Close other applications to free memory
 - Consider using SSD storage
 
-#### Slow AI Responses
-- Check internet connection
-- Reduce `max_tokens` in configuration
-- Use faster models (gpt-3.5-turbo vs gpt-4)
+#### OpenRouter Notes
+- Set `OPENROUTER_SITE_URL` and `OPENROUTER_APP_TITLE` to improve routing/usage analytics.
 
 ### Debug Mode
 ```bash
@@ -435,7 +456,7 @@ streamlit run app.py
 
 ### Data Privacy
 - All candidate data is stored locally in SQLite
-- No data is sent to external services except OpenAI
+- Chat and form prompts go to OpenRouter per your configuration
 - Implement proper access controls for production use
 
 ### API Security

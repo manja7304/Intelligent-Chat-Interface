@@ -34,12 +34,42 @@ class AIFormFiller:
         temperature: float = DEFAULT_TEMPERATURE,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
         session: Optional[requests.Session] = None,
+        provider: str = "openai",
+        ollama_host: Optional[str] = None,
+        openrouter_api_key: Optional[str] = None,
+        openrouter_model: Optional[str] = None,
+        openrouter_api_url: Optional[str] = None,
+        openrouter_site_url: Optional[str] = None,
+        openrouter_app_title: Optional[str] = None,
     ):
         self.api_key = api_key
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.timeout_seconds = timeout_seconds
+
+        # Provider settings
+        self.provider = (provider or "openai").lower()
+        self.ollama_host = ollama_host or os.getenv(
+            "OLLAMA_HOST", "http://127.0.0.1:11434"
+        )
+
+        # OpenRouter settings
+        self.openrouter_api_key = openrouter_api_key or os.getenv(
+            "OPENROUTER_API_KEY", ""
+        )
+        self.openrouter_model = openrouter_model or os.getenv(
+            "OPENROUTER_MODEL", "openrouter/auto"
+        )
+        self.openrouter_api_url = openrouter_api_url or os.getenv(
+            "OPENROUTER_API_URL", "https://openrouter.ai/api/v1/chat/completions"
+        )
+        self.openrouter_site_url = openrouter_site_url or os.getenv(
+            "OPENROUTER_SITE_URL", "http://localhost:8501"
+        )
+        self.openrouter_app_title = openrouter_app_title or os.getenv(
+            "OPENROUTER_APP_TITLE", "Intelligent Chat Interface"
+        )
 
         # Create or use provided HTTP session with retries
         self.session = session or self._build_session_with_retries()
@@ -58,16 +88,23 @@ class AIFormFiller:
             Filled HR form data
         """
         try:
-            # Check if API key is available
-            if not self.api_key or self.api_key == "your_openai_api_key_here":
-                logger.warning("OpenAI API key not provided, using fallback form")
-                return self._create_fallback_form(form_template, candidate_data)
+            # Check credentials only for OpenAI provider
+            if self.provider == "openai":
+                if not self.api_key or self.api_key == "your_openai_api_key_here":
+                    logger.warning("OpenAI API key not provided, using fallback form")
+                    return self._create_fallback_form(form_template, candidate_data)
+            elif self.provider == "openrouter":
+                if not self.openrouter_api_key:
+                    logger.warning(
+                        "OpenRouter API key not provided, using fallback form"
+                    )
+                    return self._create_fallback_form(form_template, candidate_data)
 
             # Prepare the prompt for AI
             prompt = self._create_form_filling_prompt(candidate_data, form_template)
 
-            # Call OpenAI API via REST to avoid SDK init issues
-            ai_response = self._call_openai_chat(prompt)
+            # Call selected provider
+            ai_response = self._call_llm_chat(prompt)
 
             # Parse the AI response
             filled_form = self._parse_ai_response(
@@ -752,3 +789,100 @@ class AIFormFiller:
         except Exception as e:
             logger.error(f"Error calling OpenAI chat API: {e}")
             return "{}"  # Return empty JSON to trigger fallback
+
+    def _call_ollama_chat(self, prompt: str) -> str:
+        """Call Ollama local chat API and return the text response."""
+        try:
+            url = f"{self.ollama_host.rstrip('/')}/api/chat"
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are an expert HR assistant that fills out forms based on candidate data. Be accurate and professional.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "options": {
+                    # Ollama uses approximate controls; map temperature and num_predict
+                    "temperature": self.temperature,
+                    "num_predict": self.max_tokens,
+                },
+            }
+            resp = self.session.post(url, json=payload, timeout=self.timeout_seconds)
+            resp.raise_for_status()
+            data = resp.json()
+            # Non-streaming returns full message
+            if isinstance(data, dict):
+                msg = data.get("message") or {}
+                content = msg.get("content")
+                if content:
+                    return content
+                # Some versions may return just 'response'
+                if "response" in data:
+                    return str(data["response"])  # type: ignore
+            return "{}"
+        except Exception as e:
+            logger.error(f"Error calling Ollama chat API: {e}")
+            return "{}"
+
+    def _call_llm_chat(self, prompt: str) -> str:
+        """Dispatch to the configured provider's chat API."""
+        if self.provider == "ollama":
+            # If the model wasn't explicitly set, try environment default for Ollama
+            if self.model == DEFAULT_MODEL:
+                self.model = os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct")
+            return self._call_ollama_chat(prompt)
+        if self.provider == "openrouter":
+            return self._call_openrouter_chat(prompt)
+        return self._call_openai_chat(prompt)
+
+    def chat(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Generic chat interface using configured provider.
+
+        If a system_prompt is provided, it will be prepended to the user prompt.
+        """
+        try:
+            if system_prompt:
+                composed = f"System: {system_prompt}\n\nUser: {prompt}"
+            else:
+                composed = prompt
+            return self._call_llm_chat(composed)
+        except Exception as e:
+            logger.error(f"Error during chat: {e}")
+            return ""
+
+    def _call_openrouter_chat(self, prompt: str) -> str:
+        """Call OpenRouter Chat Completions API and return the text response."""
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.openrouter_api_key}",
+                "HTTP-Referer": self.openrouter_site_url,
+                "X-Title": self.openrouter_app_title,
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.openrouter_model or self.model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are an expert HR assistant that fills out forms based on candidate data. Be accurate and professional.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+            }
+            resp = self.session.post(
+                self.openrouter_api_url,
+                headers=headers,
+                json=payload,
+                timeout=self.timeout_seconds,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.error(f"Error calling OpenRouter chat API: {e}")
+            return "{}"

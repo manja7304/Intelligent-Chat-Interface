@@ -294,7 +294,8 @@ class DatabaseManager:
                 values = []
 
                 for key, value in update_data.items():
-                    if key == "skills":
+                    # Ensure list-like JSON fields are stored as JSON strings
+                    if key in {"skills", "experience", "education"}:
                         value = json.dumps(value) if value else "[]"
                     set_clauses.append(f"{key} = ?")
                     values.append(value)

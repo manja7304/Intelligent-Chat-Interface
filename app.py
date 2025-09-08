@@ -254,6 +254,178 @@ def normalize_candidate_data(candidate: Dict[str, Any]) -> Dict[str, Any]:
     return candidate
 
 
+def score_candidate_fit(candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Score candidate against predefined ML/NLP/LLM criteria and return breakdown.
+
+    Returns a dict with keys: total, bucket_scores, details, recommendation.
+    """
+    if not isinstance(candidate, dict):
+        return {
+            "total": 0,
+            "bucket_scores": {},
+            "details": [],
+            "recommendation": "Not a fit",
+        }
+
+    # Weights per rubric
+    weights = {
+        "core": 40,
+        "nlp_llm": 25,
+        "problem_comm": 15,
+        "systems": 15,
+        "bonus": 5,
+    }
+
+    # Helper getters
+    skills = set([s.lower() for s in candidate.get("skills", []) if isinstance(s, str)])
+    text_blobs = []
+    for k in ["summary", "work_experience", "experience", "projects", "education"]:
+        v = candidate.get(k)
+        if isinstance(v, str):
+            text_blobs.append(v.lower())
+        elif isinstance(v, list):
+            text_blobs.extend([str(x).lower() for x in v])
+    text_all = "\n".join(text_blobs)
+
+    # Core skills (40)
+    core_pts = 0
+    core_max = weights["core"]
+    # Python
+    if "python" in skills or "python" in text_all:
+        core_pts += 10
+    # Frameworks
+    frameworks_hit = 0
+    for fw in ["tensorflow", "pytorch", "scikit-learn", "sklearn"]:
+        if fw in skills or fw in text_all:
+            frameworks_hit += 1
+    core_pts += min(frameworks_hit, 2) * 5  # up to 10
+    # Data prep/model eval
+    for kw in [
+        "feature engineering",
+        "preprocessing",
+        "data preprocessing",
+        "cross-validation",
+        "model evaluation",
+        "metrics",
+    ]:
+        if kw in text_all:
+            core_pts += 5
+            break
+    # Software development practices
+    for kw in ["unit test", "pytest", "ci", "cd", "packag", "docker"]:
+        if kw in text_all:
+            core_pts += 5
+            break
+    core_pts = min(core_pts, core_max)
+
+    # NLP/LLM (25)
+    nlp_pts = 0
+    nlp_max = weights["nlp_llm"]
+    # NLP libs
+    nlp_lib_hit = 0
+    for lib in ["spacy", "nltk", "hugging face", "transformers"]:
+        if lib in skills or lib in text_all:
+            nlp_lib_hit += 1
+    nlp_pts += min(nlp_lib_hit, 2) * 4  # up to 8
+    # LLM experience
+    for kw in [
+        "gpt",
+        "bert",
+        "t5",
+        "llm",
+        "prompt engineering",
+        "fine-tuning",
+        "finetuning",
+        "deployment",
+    ]:
+        if kw in text_all:
+            nlp_pts += 12
+            break
+    # Text pipelines mention
+    for kw in ["tokenization", "ner", "classification", "text processing"]:
+        if kw in text_all:
+            nlp_pts += 5
+            break
+    nlp_pts = min(nlp_pts, nlp_max)
+
+    # Problem solving & communication (15)
+    pc_pts = 0
+    pc_max = weights["problem_comm"]
+    for kw in [
+        "analytical",
+        "problem-solving",
+        "problem solving",
+        "root cause",
+        "design doc",
+        "presentation",
+        "communication",
+    ]:
+        if kw in text_all:
+            pc_pts += 8
+            break
+    for kw in ["communication", "written", "verbal", "stakeholder"]:
+        if kw in text_all:
+            pc_pts += 7
+            break
+    pc_pts = min(pc_pts, pc_max)
+
+    # Systems & tooling (15)
+    sys_pts = 0
+    sys_max = weights["systems"]
+    for kw in ["aws", "azure", "gcp"]:
+        if kw in skills or kw in text_all:
+            sys_pts += 6
+            break
+    for kw in ["git", "github", "gitlab", "version control"]:
+        if kw in skills or kw in text_all:
+            sys_pts += 4
+            break
+    for kw in ["cybersecurity", "security", "owasp"]:
+        if kw in text_all:
+            sys_pts += 5
+            break
+    sys_pts = min(sys_pts, sys_max)
+
+    # Bonus (5)
+    bonus_pts = 0
+    for kw in [
+        "transformer",
+        "attention mechanism",
+        "attention mechanisms",
+        "research",
+        "coursework",
+    ]:
+        if kw in text_all:
+            bonus_pts = 5
+            break
+
+    total = core_pts + nlp_pts + pc_pts + sys_pts + bonus_pts
+    if total >= 85:
+        rec = "Strong fit"
+    elif total >= 70:
+        rec = "Fit"
+    elif total >= 55:
+        rec = "Borderline"
+    else:
+        rec = "Not a fit"
+
+    return {
+        "total": int(total),
+        "bucket_scores": {
+            "core": int(core_pts),
+            "nlp_llm": int(nlp_pts),
+            "problem_comm": int(pc_pts),
+            "systems": int(sys_pts),
+            "bonus": int(bonus_pts),
+        },
+        "details": [
+            "Scored based on keywords in skills/experience/summary.",
+            "Tuned for Python/ML/NLP/LLM roles.",
+        ],
+        "recommendation": rec,
+    }
+
+
 def process_user_input(
     prompt: str,
     db_manager: DatabaseManager,
@@ -384,7 +556,35 @@ def initialize_components():
             password=config.LINKEDIN_PASSWORD,
             serpapi_key=config.SERPAPI_KEY,
         )
-        ai_form_filler = AIFormFiller(api_key=config.OPENAI_API_KEY)
+        # Choose provider based on configuration
+        provider = getattr(config, "AI_PROVIDER", "openai")
+        model = getattr(config, "DEFAULT_MODEL", "gpt-3.5-turbo")
+        ollama_host = getattr(config, "OLLAMA_HOST", "http://127.0.0.1:11434")
+        # OpenRouter settings
+        openrouter_api_key = getattr(config, "OPENROUTER_API_KEY", "")
+        openrouter_model = getattr(config, "OPENROUTER_MODEL", "openrouter/auto")
+        openrouter_api_url = getattr(
+            config,
+            "OPENROUTER_API_URL",
+            "https://openrouter.ai/api/v1/chat/completions",
+        )
+        openrouter_site_url = getattr(
+            config, "OPENROUTER_SITE_URL", "http://localhost:8501"
+        )
+        openrouter_app_title = getattr(
+            config, "OPENROUTER_APP_TITLE", "Intelligent Chat Interface"
+        )
+        ai_form_filler = AIFormFiller(
+            api_key=config.OPENAI_API_KEY,
+            model=model,
+            provider=provider,
+            ollama_host=ollama_host,
+            openrouter_api_key=openrouter_api_key,
+            openrouter_model=openrouter_model,
+            openrouter_api_url=openrouter_api_url,
+            openrouter_site_url=openrouter_site_url,
+            openrouter_app_title=openrouter_app_title,
+        )
 
         return db_manager, resume_parser, linkedin_scraper, ai_form_filler
     except Exception as e:
@@ -400,12 +600,31 @@ with st.sidebar:
     st.header("🤖 AI Assistant")
     st.markdown("---")
 
-    # API Key configuration
+    # Provider configuration display
     st.subheader("Configuration")
-    if config.OPENAI_API_KEY:
-        st.caption("OpenAI API key loaded from environment.")
-    else:
-        st.warning("OpenAI API key not found. Set OPENAI_API_KEY in your .env file.")
+    st.write(f"**AI Provider:** {getattr(config, 'AI_PROVIDER', 'openai').title()}")
+    _provider_name = getattr(config, "AI_PROVIDER", "openai")
+    if _provider_name == "openai":
+        if config.OPENAI_API_KEY:
+            st.caption("OpenAI API key loaded from environment.")
+        else:
+            st.warning(
+                "OpenAI API key not found. Set OPENAI_API_KEY in your .env file."
+            )
+    elif _provider_name == "ollama":
+        st.caption(
+            f"Using Ollama at {getattr(config, 'OLLAMA_HOST', 'http://127.0.0.1:11434')} with model {getattr(config, 'OLLAMA_MODEL', 'llama3.1:8b-instruct')}"
+        )
+    elif _provider_name == "openrouter":
+        if getattr(config, "OPENROUTER_API_KEY", ""):
+            st.caption("OpenRouter API key loaded from environment.")
+            st.caption(
+                f"OpenRouter model: {getattr(config, 'OPENROUTER_MODEL', 'openrouter/auto')}"
+            )
+        else:
+            st.warning(
+                "OpenRouter API key not found. Set OPENROUTER_API_KEY in your .env file."
+            )
 
     st.markdown("---")
 
@@ -451,10 +670,21 @@ if prompt := st.chat_input(
 
     # Process the user input
     with st.chat_message("assistant"):
+        # First try command-based actions; if not matched, fall back to LLM chat
         response = process_user_input(
             prompt, db_manager, resume_parser, linkedin_scraper, ai_form_filler
         )
-        st.markdown(response)
+        if response and response.strip():
+            st.markdown(response)
+        else:
+            try:
+                system_prompt = (
+                    "You are an HR assistant. Answer concisely and professionally."
+                )
+                llm_reply = ai_form_filler.chat(prompt, system_prompt)
+                st.markdown(llm_reply or "(No response)")
+            except Exception as e:
+                st.markdown(f"Error: {e}")
 
 # File upload section
 st.markdown("---")
@@ -629,7 +859,16 @@ if (
 
     with col1:
         if st.button("📝 Generate Standard HR Form", use_container_width=True):
-            if ai_form_filler and config.OPENAI_API_KEY:
+            provider_name = getattr(config, "AI_PROVIDER", "openai")
+            has_ai = (
+                (provider_name == "openai" and bool(config.OPENAI_API_KEY))
+                or provider_name == "ollama"
+                or (
+                    provider_name == "openrouter"
+                    and bool(getattr(config, "OPENROUTER_API_KEY", ""))
+                )
+            )
+            if ai_form_filler and has_ai:
                 with st.spinner("Generating HR form..."):
                     try:
                         filled_form = ai_form_filler.generate_standard_hr_form(
@@ -647,11 +886,22 @@ if (
                     except Exception as e:
                         st.error(f"Error generating form: {e}")
             else:
-                st.error("OpenAI API key required for form generation")
+                st.error(
+                    "AI provider not configured. Set OPENAI_API_KEY, or configure Ollama/OpenRouter."
+                )
 
     with col2:
         if st.button("🎯 Generate Interview Form", use_container_width=True):
-            if ai_form_filler and config.OPENAI_API_KEY:
+            provider_name = getattr(config, "AI_PROVIDER", "openai")
+            has_ai = (
+                (provider_name == "openai" and bool(config.OPENAI_API_KEY))
+                or provider_name == "ollama"
+                or (
+                    provider_name == "openrouter"
+                    and bool(getattr(config, "OPENROUTER_API_KEY", ""))
+                )
+            )
+            if ai_form_filler and has_ai:
                 with st.spinner("Generating interview form..."):
                     try:
                         filled_form = ai_form_filler.generate_interview_form(candidate)
@@ -667,7 +917,9 @@ if (
                     except Exception as e:
                         st.error(f"Error generating form: {e}")
             else:
-                st.error("OpenAI API key required for form generation")
+                st.error(
+                    "AI provider not configured. Set OPENAI_API_KEY, or configure Ollama/OpenRouter."
+                )
 
     # Display generated form
     if hasattr(st.session_state, "generated_form") and st.session_state.generated_form:
@@ -724,6 +976,47 @@ if (
                             st.write(
                                 f"**{field_name.replace('_', ' ').title()}:** {field_value}"
                             )
+
+    # Candidate Fit Assessment
+    st.markdown("---")
+    st.header("✅ Candidate Fit Assessment")
+
+    assess_col1, assess_col2 = st.columns([1, 1])
+    with assess_col1:
+        if st.button("🧮 Assess Fit", use_container_width=True):
+            try:
+                result = score_candidate_fit(candidate)
+                st.session_state.candidate_fit = result
+                st.success("Assessment generated.")
+            except Exception as e:
+                st.error(f"Error scoring candidate: {e}")
+
+    with assess_col2:
+        if st.button("💾 Export Assessment JSON", use_container_width=True):
+            try:
+                result = st.session_state.get("candidate_fit")
+                if result:
+                    os.makedirs("exports", exist_ok=True)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"exports/fit_assessment_{candidate['name'].replace(' ', '_')}_{timestamp}.json"
+                    with open(filename, "w", encoding="utf-8") as f:
+                        json.dump(result, f, indent=2)
+                    st.success(f"Saved assessment to {filename}")
+                else:
+                    st.info("Run assessment first.")
+            except Exception as e:
+                st.error(f"Error exporting assessment: {e}")
+
+    if st.session_state.get("candidate_fit"):
+        fit = st.session_state["candidate_fit"]
+        st.subheader(f"Overall Score: {fit['total']} / 100 — {fit['recommendation']}")
+        bs = fit.get("bucket_scores", {})
+        st.write(
+            f"Core: {bs.get('core', 0)} | NLP/LLM: {bs.get('nlp_llm', 0)} | Problem/Comm: {bs.get('problem_comm', 0)} | Systems: {bs.get('systems', 0)} | Bonus: {bs.get('bonus', 0)}"
+        )
+        with st.expander("Details"):
+            for line in fit.get("details", []):
+                st.write(f"- {line}")
 
 # Candidates overview
 if hasattr(st.session_state, "show_candidates") and getattr(
@@ -789,7 +1082,7 @@ st.markdown(
     f"""
     <div style='text-align: center; color: #666; padding: 1rem;'>
         {config.APP_TITLE} v{config.APP_VERSION} | 
-        Built with ❤️ using Streamlit and OpenAI
+        Built with ❤️ using Streamlit and {('OpenAI' if getattr(config, 'AI_PROVIDER', 'openai') == 'openai' else ('Ollama' if getattr(config, 'AI_PROVIDER', 'openai') == 'ollama' else 'OpenRouter'))}
     </div>
     """,
     unsafe_allow_html=True,
